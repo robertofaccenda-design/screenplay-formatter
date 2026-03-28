@@ -1,0 +1,1 @@
+{"functions":[{"bundler":"esbuild","buildData":{"runtimeAPIVersion":1},"mainFile":"/Users/Robjhon/Desktop/screenplay-formatter/netlify/functions/format.js","name":"format","priority":10,"path":"/Users/Robjhon/Desktop/screenplay-formatter/.netlify/functions/format.zip","runtime":"js"}],"system":{"arch":"arm64","platform":"darwin"},"timestamp":1774690310999,"version":1}
