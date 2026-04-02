@@ -9,6 +9,18 @@
 [functions."format"]
   timeout = 30
 
+[functions."analyze"]
+  timeout = 30
+
+[functions."character-sheets"]
+  timeout = 30
+
+[functions."breakdown"]
+  timeout = 30
+
+[functions."location-sheets"]
+  timeout = 30
+
 [dev]
   command = "npm run dev"
   port = 3000
