@@ -1,3 +1,21 @@
 {
-	"siteId": "9fb3192f-59a3-4978-8983-058aee10cd8b"
+	"siteId": "9fb3192f-59a3-4978-8983-058aee10cd8b",
+	"geolocation": {
+		"data": {
+			"city": "Rome",
+			"country": {
+				"code": "IT",
+				"name": "Italy"
+			},
+			"subdivision": {
+				"code": "62",
+				"name": "Lazio"
+			},
+			"timezone": "Europe/Rome",
+			"latitude": 41.8905,
+			"longitude": 12.5127,
+			"postalCode": "00125"
+		},
+		"timestamp": 1774695942028
+	}
 }
