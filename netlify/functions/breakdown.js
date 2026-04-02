@@ -195,11 +195,12 @@ export const handler = async (event) => {
 
     const data = await response.json()
 
+    console.log('[breakdown] API status:', response.status, JSON.stringify(data.error || ''))
     if (data.error) {
       return {
         statusCode: 500,
         headers,
-        body: JSON.stringify({ error: data.error.message }),
+        body: JSON.stringify({ error: data.error?.message || JSON.stringify(data.error) || 'Errore API Anthropic' }),
       }
     }
 
@@ -216,7 +217,7 @@ export const handler = async (event) => {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: 'Errore interno: ' + err.message }),
+      body: JSON.stringify({ error: `Errore interno: ${err.message}` }),
     }
   }
 }
