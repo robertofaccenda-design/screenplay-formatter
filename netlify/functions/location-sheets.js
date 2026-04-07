@@ -1,6 +1,7 @@
 // netlify/functions/location-sheets.js
 // Generazione automatica di schede location complete
 // Utile per: scenografo, location manager, direttore di fotografia, docente
+import { jsonrepair } from 'jsonrepair'
 
 const SYSTEM_PROMPT = `Sei un location manager e scenografo cinematografico con 20 anni di esperienza, con una solida formazione nell'insegnamento della produzione audiovisiva. Analizza una sceneggiatura in formato JSON e genera schede location dettagliate, pronte per il location scouting e per uso didattico.
 
@@ -144,7 +145,7 @@ export const handler = async (event) => {
         const prefix = e.type === 'scene_heading'
           ? `[SCENA ${sceneCount}][SCENE_HEADING]`
           : `[${e.type.toUpperCase()}]`
-        return `${prefix} ${e.content}`
+        return `${prefix} ${e.content.slice(0, 200)}`
       })
       .join('\n')
 
@@ -157,7 +158,7 @@ export const handler = async (event) => {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 4000,
+        max_tokens: 6000,
         system: SYSTEM_PROMPT,
         messages: [
           {
@@ -181,7 +182,7 @@ export const handler = async (event) => {
 
     const raw = data.content?.find((b) => b.type === 'text')?.text || '{}'
     const clean = raw.replace(/```json|```/g, '').trim()
-    const result = JSON.parse(clean)
+    const result = JSON.parse(jsonrepair(clean))
 
     return {
       statusCode: 200,

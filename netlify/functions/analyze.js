@@ -1,5 +1,6 @@
 // netlify/functions/analyze.js
 // Assistente Drammaturgico AI — analisi strutturale e narrativa della sceneggiatura
+import { jsonrepair } from 'jsonrepair'
 
 const SYSTEM_PROMPT = `Sei un dramaturg e docente di sceneggiatura cinematografica con 30 anni di esperienza nell'insegnamento e nella produzione. Il tuo compito è analizzare una sceneggiatura in formato JSON (array di elementi tipizzati) e restituire ESCLUSIVAMENTE un oggetto JSON valido con l'analisi drammaturgica completa.
 
@@ -116,10 +117,10 @@ export const handler = async (event) => {
       }
     }
 
-    // Serializza gli elementi in un formato leggibile per il modello
+    // Serializza gli elementi in un formato compatto per ridurre i token in input
     const sceneggiatura = elements
       .filter(e => e.type !== 'blank')
-      .map(e => `[${e.type.toUpperCase()}] ${e.content}`)
+      .map(e => `[${e.type.toUpperCase()}] ${e.content.slice(0, 200)}`)
       .join('\n')
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -131,7 +132,7 @@ export const handler = async (event) => {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 4000,
+        max_tokens: 6000,
         system: SYSTEM_PROMPT,
         messages: [
           {
@@ -155,7 +156,7 @@ export const handler = async (event) => {
 
     const raw = data.content?.find((b) => b.type === 'text')?.text || '{}'
     const clean = raw.replace(/```json|```/g, '').trim()
-    const analysis = JSON.parse(clean)
+    const analysis = JSON.parse(jsonrepair(clean))
 
     return {
       statusCode: 200,

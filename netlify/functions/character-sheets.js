@@ -1,6 +1,7 @@
 // netlify/functions/character-sheets.js
 // Generazione automatica di schede personaggio complete
 // Utile per: casting, pre-produzione, analisi didattica, workshop
+import { jsonrepair } from 'jsonrepair'
 
 const SYSTEM_PROMPT = `Sei un dramaturg e script analyst con esperienza sia nella produzione cinematografica professionale che nell'insegnamento accademico della scrittura creativa. Il tuo compito è generare schede personaggio dettagliate a partire da una sceneggiatura in formato JSON.
 
@@ -128,7 +129,7 @@ export const handler = async (event) => {
       .map(e => {
         if (e.type === 'scene_heading') sceneCount++
         const prefix = e.type === 'scene_heading' ? `[SCENA ${sceneCount}][${e.type.toUpperCase()}]` : `[${e.type.toUpperCase()}]`
-        return `${prefix} ${e.content}`
+        return `${prefix} ${e.content.slice(0, 200)}`
       })
       .join('\n')
 
@@ -141,7 +142,7 @@ export const handler = async (event) => {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 4000,
+        max_tokens: 6000,
         system: SYSTEM_PROMPT,
         messages: [
           {
@@ -165,7 +166,7 @@ export const handler = async (event) => {
 
     const raw = data.content?.find((b) => b.type === 'text')?.text || '{}'
     const clean = raw.replace(/```json|```/g, '').trim()
-    const result = JSON.parse(clean)
+    const result = JSON.parse(jsonrepair(clean))
 
     return {
       statusCode: 200,
