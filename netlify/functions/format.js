@@ -1,6 +1,7 @@
 // netlify/functions/format.js
 // Proxy sicuro verso Anthropic API
 // La ANTHROPIC_API_KEY rimane sul server, mai esposta al browser
+import { jsonrepair } from 'jsonrepair'
 
 const SYSTEM_PROMPT = `Sei un esperto di sceneggiatura cinematografica professionale italiana e internazionale. Il tuo compito è analizzare un testo grezzo non formattato e restituire ESCLUSIVAMENTE un array JSON valido con gli elementi della sceneggiatura classificati e corretti.
 
@@ -93,7 +94,7 @@ export const handler = async (event) => {
 
     const raw = data.content?.find((b) => b.type === 'text')?.text || '[]'
     const clean = raw.replace(/```json|```/g, '').trim()
-    const elements = JSON.parse(clean)
+    const elements = JSON.parse(jsonrepair(clean))
 
     return {
       statusCode: 200,
