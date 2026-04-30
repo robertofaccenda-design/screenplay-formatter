@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cf:dev": "npm run build && npx wrangler dev",
+    "cf:deploy": "npm run build && npx wrangler deploy"
   },
   "dependencies": {
     "jsonrepair": "^3.13.3",

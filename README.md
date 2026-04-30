@@ -1,5 +1,28 @@
 # React + Vite
 
+## Cloudflare Workers deploy
+
+Questo progetto puo essere pubblicato su Cloudflare Workers con static assets.
+
+Configurazione principale:
+
+- `wrangler.jsonc`: configura Worker, assets Vite da `dist` e fallback SPA
+- `worker/index.js`: serve gli asset statici e gestisce `/api/format`
+- `functions/api/format.js`: variante compatibile con Cloudflare Pages Functions
+
+Comandi:
+
+```bash
+npm run cf:dev
+npm run cf:deploy
+```
+
+Prima di usare la formattazione AI, aggiungi il secret Cloudflare:
+
+```text
+ANTHROPIC_API_KEY
+```
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
