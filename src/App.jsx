@@ -243,9 +243,9 @@ function AppGuidedOnboarding({ onClose }) {
       title: "Benvenuto in Screenplay Formatter AI",
       text: "Questa schermata è il punto di lavoro: qui trasformi una bozza in sceneggiatura, analisi e schede operative.",
       color: "#8B5CF6",
-      top: 128,
-      left: "calc(50% - 108px)",
-      line: { x1: "50%", y1: 128, x2: "calc(100% - 64px)", y2: 70 },
+      top: 84,
+      left: "calc(100% - 254px)",
+      line: { x1: "78%", y1: 120, x2: "92%", y2: 72 },
       highlight: { left: "calc(100% - 118px)", top: 48, width: 96, height: 42 },
     },
     {
@@ -253,8 +253,8 @@ function AppGuidedOnboarding({ onClose }) {
       text: "Trascina qui TXT, DOCX o DOC. Il sistema accetta solo testi che sembrano sceneggiature.",
       color: "#8B5CF6",
       top: 132,
-      left: 440,
-      line: { x1: 440, y1: 170, x2: 128, y2: 196 },
+      left: 300,
+      line: { x1: 300, y1: 168, x2: 256, y2: 198 },
       highlight: { left: 8, top: 116, width: 252, height: 170 },
     },
     {
@@ -262,8 +262,8 @@ function AppGuidedOnboarding({ onClose }) {
       text: "Inserisci la tua chiave Anthropic personale. Se scegli di ricordarla, resta solo nel tuo browser.",
       color: "#22C55E",
       top: 258,
-      left: 440,
-      line: { x1: 440, y1: 298, x2: 128, y2: 352 },
+      left: 300,
+      line: { x1: 300, y1: 300, x2: 256, y2: 352 },
       highlight: { left: 8, top: 294, width: 252, height: 118 },
     },
     {
@@ -271,18 +271,18 @@ function AppGuidedOnboarding({ onClose }) {
       text: "Puoi anche lavorare senza file: incolla direttamente qui una scena o una bozza.",
       color: "#FACC15",
       top: 382,
-      left: 650,
-      line: { x1: 650, y1: 422, x2: 338, y2: 504 },
-      highlight: { left: 218, top: 428, width: 252, height: 142 },
+      left: 300,
+      line: { x1: 300, y1: 424, x2: 256, y2: 500 },
+      highlight: { left: 8, top: 428, width: 252, height: 142 },
     },
     {
       title: "Formatta e analizza",
       text: "Una volta inserito il testo, avvia la formattazione. Dopo compariranno analisi, schede e breakdown.",
       color: "#38BDF8",
-      top: 616,
-      left: 440,
-      line: { x1: 440, y1: 656, x2: 128, y2: 726 },
-      highlight: { left: 8, top: 702, width: 252, height: 50 },
+      top: 552,
+      left: 300,
+      line: { x1: 300, y1: 592, x2: 256, y2: 620 },
+      highlight: { left: 8, top: 578, width: 252, height: 48 },
     },
   ];
 
@@ -317,34 +317,38 @@ function AppGuidedOnboarding({ onClose }) {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 50, pointerEvents: "none", background: "rgba(4,4,10,.32)" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 50, pointerEvents: "none" }}>
       <svg width="100%" height="100%" style={{ position: "absolute", inset: 0, overflow: "visible" }}>
-        <line
-          x1={active.line.x1}
-          y1={active.line.y1}
-          x2={active.line.x2}
-          y2={active.line.y2}
-          stroke={active.color}
-          strokeWidth={3}
-          opacity={1}
-        />
+        {steps.map((step) => (
+          <line
+            key={step.title}
+            x1={step.line.x1}
+            y1={step.line.y1}
+            x2={step.line.x2}
+            y2={step.line.y2}
+            stroke={step.color}
+            strokeWidth={3}
+            opacity={1}
+          />
+        ))}
       </svg>
 
-      <div style={{ position: "absolute", left: active.highlight.left, top: active.highlight.top, width: active.highlight.width, height: active.highlight.height, border: `2px solid ${active.color}`, borderRadius: "8px", boxShadow: `0 0 0 1px ${active.color}44, 0 0 32px ${active.color}44`, background: "rgba(255,255,255,.025)" }} />
+      {steps.map((step) => (
+        <div key={step.title} style={{ position: "absolute", left: step.highlight.left, top: step.highlight.top, width: step.highlight.width, height: step.highlight.height, border: `2px solid ${step.color}`, borderRadius: "8px", boxShadow: `0 0 0 1px ${step.color}44, 0 0 30px ${step.color}44`, background: "rgba(255,255,255,.02)" }} />
+      ))}
 
-      <div style={{ position: "absolute", top: active.top, left: active.left, width: 244, background: "rgba(13,13,22,.97)", border: `2px solid ${active.color}`, borderRadius: "8px", padding: "14px 14px 12px", boxShadow: `0 20px 48px rgba(0,0,0,.5), 0 0 30px ${active.color}55`, pointerEvents: "auto" }}>
-        <div style={{ position: "absolute", left: -12, top: -12, width: 24, height: 24, borderRadius: "50%", background: active.color, color: "#08080d", display: "grid", placeItems: "center", fontFamily: "sans-serif", fontSize: "12px", fontWeight: "bold" }}>{activeStep + 1}</div>
-        <div style={{ color: "#fff", fontFamily: "sans-serif", fontSize: "13px", fontWeight: "bold", marginBottom: "7px" }}>{active.title}</div>
-        <div style={{ color: "#aeb4c4", fontFamily: "sans-serif", fontSize: "12px", lineHeight: 1.45, marginBottom: "12px" }}>{active.text}</div>
-        <div style={{ display: "flex", gap: "6px" }}>
-          {activeStep > 0 && <button type="button" onClick={() => setActiveStep(activeStep - 1)} style={{ border: "1px solid rgba(255,255,255,.16)", background: "rgba(255,255,255,.07)", color: "#ddd", borderRadius: "5px", padding: "6px 8px", fontSize: "11px", cursor: "pointer" }}>Indietro</button>}
-          {activeStep < steps.length - 1 ? (
-            <button type="button" onClick={() => setActiveStep(activeStep + 1)} style={{ border: "none", background: active.color, color: "#08080d", borderRadius: "5px", padding: "6px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>Avanti</button>
+      {steps.map((step, index) => (
+        <div key={step.title} style={{ position: "absolute", top: step.top, left: step.left, width: 212, background: "rgba(13,13,22,.96)", border: `2px solid ${step.color}`, borderRadius: "8px", padding: "12px 12px 10px", boxShadow: `0 18px 42px rgba(0,0,0,.42), 0 0 22px ${step.color}44`, pointerEvents: "auto" }}>
+          <div style={{ position: "absolute", left: -12, top: -12, width: 24, height: 24, borderRadius: "50%", background: step.color, color: "#08080d", display: "grid", placeItems: "center", fontFamily: "sans-serif", fontSize: "12px", fontWeight: "bold" }}>{index + 1}</div>
+          <div style={{ color: "#fff", fontFamily: "sans-serif", fontSize: "12px", fontWeight: "bold", marginBottom: "6px" }}>{step.title}</div>
+          <div style={{ color: "#aeb4c4", fontFamily: "sans-serif", fontSize: "11px", lineHeight: 1.45, marginBottom: "10px" }}>{step.text}</div>
+          {index < steps.length - 1 ? (
+            <button type="button" onClick={() => setActiveStep(Math.min(steps.length - 1, index + 1))} style={{ border: "none", background: step.color, color: "#08080d", borderRadius: "5px", padding: "6px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>Avanti</button>
           ) : (
-            <button type="button" onClick={finishTour} style={{ border: "none", background: active.color, color: "#08080d", borderRadius: "5px", padding: "6px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>Ho capito</button>
+            <button type="button" onClick={finishTour} style={{ border: "none", background: step.color, color: "#08080d", borderRadius: "5px", padding: "6px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>Ho capito</button>
           )}
         </div>
-      </div>
+      ))}
 
       <div style={{ position: "absolute", right: 22, bottom: 22, width: 178, background: "rgba(16,16,24,.94)", border: "1px solid rgba(255,255,255,.12)", borderRadius: "8px", padding: "12px", pointerEvents: "auto", fontFamily: "sans-serif", boxShadow: "0 16px 42px rgba(0,0,0,.35)" }}>
         <div style={{ color: "#fff", fontSize: "12px", fontWeight: "bold", marginBottom: "4px" }}>Consiglio</div>
