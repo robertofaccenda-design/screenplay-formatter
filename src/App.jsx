@@ -312,7 +312,7 @@ function AppGuidedOnboarding({ onClose, targets }) {
           line: index === 0
             ? {
                 x1: cardLeft + cardWidth,
-                y1: cardTop + 44,
+                y1: rect.bottom + 2,
                 x2: rect.left - 2,
                 y2: rect.bottom + 2,
               }
