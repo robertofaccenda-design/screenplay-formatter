@@ -340,7 +340,7 @@ const ALLOWED_ELEMENT_TYPES = new Set([
 
 const jsonHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Headers": "Content-Type, X-Anthropic-API-Key",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Content-Type": "application/json",
 };
@@ -363,6 +363,15 @@ const extractAnthropicError = (payload, statusCode) => {
   if (typeof payload?.message === "string") return payload.message;
   return `Errore Anthropic (${statusCode}).`;
 };
+
+const getAnthropicApiKey = (request, env) => {
+  const userApiKey = request.headers.get("X-Anthropic-API-Key")?.trim();
+  return userApiKey || env.ANTHROPIC_API_KEY || "";
+};
+
+const missingApiKeyResponse = () => jsonResponse({
+  error: "API key Anthropic non configurata. Inserisci la tua chiave personale nell'app oppure imposta ANTHROPIC_API_KEY nei secrets del Worker Cloudflare.",
+}, 502);
 
 const parseElementsFromTextBlock = (textBlock) => {
   if (!textBlock || typeof textBlock !== "string") return null;
@@ -451,11 +460,9 @@ const handleFormat = async (request, env) => {
       return jsonResponse({ error: "Testo troppo lungo. Riduci il contenuto e riprova." }, 413);
     }
 
-    const apiKey = env.ANTHROPIC_API_KEY;
+    const apiKey = getAnthropicApiKey(request, env);
     if (!apiKey) {
-      return jsonResponse({
-        error: "API key non configurata. Imposta ANTHROPIC_API_KEY nei secrets del Worker Cloudflare.",
-      }, 502);
+      return missingApiKeyResponse();
     }
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -524,11 +531,9 @@ const handleAnalyze = async (request, env) => {
       return jsonResponse({ error: "Sceneggiatura non valida o troppo breve per l'analisi." }, 400);
     }
 
-    const apiKey = env.ANTHROPIC_API_KEY;
+    const apiKey = getAnthropicApiKey(request, env);
     if (!apiKey) {
-      return jsonResponse({
-        error: "API key non configurata. Imposta ANTHROPIC_API_KEY nei secrets del Worker Cloudflare.",
-      }, 502);
+      return missingApiKeyResponse();
     }
 
     const sceneggiatura = elements
@@ -591,11 +596,9 @@ const handleCharacterSheets = async (request, env) => {
       return jsonResponse({ error: "Sceneggiatura non valida o troppo breve." }, 400);
     }
 
-    const apiKey = env.ANTHROPIC_API_KEY;
+    const apiKey = getAnthropicApiKey(request, env);
     if (!apiKey) {
-      return jsonResponse({
-        error: "API key non configurata. Imposta ANTHROPIC_API_KEY nei secrets del Worker Cloudflare.",
-      }, 502);
+      return missingApiKeyResponse();
     }
 
     let sceneCount = 0;
@@ -678,11 +681,9 @@ const handleBreakdown = async (request, env) => {
       return jsonResponse({ error: "Sceneggiatura non valida o troppo breve." }, 400);
     }
 
-    const apiKey = env.ANTHROPIC_API_KEY;
+    const apiKey = getAnthropicApiKey(request, env);
     if (!apiKey) {
-      return jsonResponse({
-        error: "API key non configurata. Imposta ANTHROPIC_API_KEY nei secrets del Worker Cloudflare.",
-      }, 502);
+      return missingApiKeyResponse();
     }
 
     const sceneggiatura = serializeElementsWithScenes(elements);
@@ -742,11 +743,9 @@ const handleLocationSheets = async (request, env) => {
       return jsonResponse({ error: "Sceneggiatura non valida o troppo breve." }, 400);
     }
 
-    const apiKey = env.ANTHROPIC_API_KEY;
+    const apiKey = getAnthropicApiKey(request, env);
     if (!apiKey) {
-      return jsonResponse({
-        error: "API key non configurata. Imposta ANTHROPIC_API_KEY nei secrets del Worker Cloudflare.",
-      }, 502);
+      return missingApiKeyResponse();
     }
 
     const sceneggiatura = serializeElementsWithScenes(elements);

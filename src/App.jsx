@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import * as mammoth from "mammoth";
 
 const API_FORMAT           = "/api/format";
@@ -6,6 +6,7 @@ const API_ANALYZE          = "/api/analyze";
 const API_CHARACTER_SHEETS = "/api/character-sheets";
 const API_BREAKDOWN        = "/api/breakdown";
 const API_LOCATION_SHEETS  = "/api/location-sheets";
+const ANTHROPIC_KEY_STORAGE = "screenplayFormatter.anthropicApiKey";
 
 // ─── Colori per tipi elemento ───────────────────────────────────────────────
 const typeLabels = {
@@ -1096,7 +1097,33 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("preview");
   const [analyTab, setAnalyTab]   = useState("struttura");
   const [dragOver, setDragOver]   = useState(false);
+  const [anthropicApiKey, setAnthropicApiKey] = useState("");
+  const [rememberApiKey, setRememberApiKey] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
   const fileInputRef = useRef();
+
+  useEffect(() => {
+    const savedKey = window.localStorage.getItem(ANTHROPIC_KEY_STORAGE) || "";
+    if (savedKey) {
+      setAnthropicApiKey(savedKey);
+      setRememberApiKey(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (rememberApiKey && anthropicApiKey.trim()) {
+      window.localStorage.setItem(ANTHROPIC_KEY_STORAGE, anthropicApiKey.trim());
+      return;
+    }
+    window.localStorage.removeItem(ANTHROPIC_KEY_STORAGE);
+  }, [anthropicApiKey, rememberApiKey]);
+
+  const apiHeaders = () => {
+    const headers = { "Content-Type": "application/json" };
+    const trimmedKey = anthropicApiKey.trim();
+    if (trimmedKey) headers["X-Anthropic-API-Key"] = trimmedKey;
+    return headers;
+  };
 
   const readFile = async (f) => {
     const ext = f.name.split(".").pop().toLowerCase();
@@ -1131,7 +1158,7 @@ export default function App() {
       setLoadingMsg("Analisi del testo in corso...");
       const response = await fetch(API_FORMAT, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: apiHeaders(),
         body: JSON.stringify({ text: rawText }),
       });
       const data = await response.json();
@@ -1151,7 +1178,7 @@ export default function App() {
     try {
       const response = await fetch(API_ANALYZE, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: apiHeaders(),
         body: JSON.stringify({ elements }),
       });
       const data = await response.json();
@@ -1172,7 +1199,7 @@ export default function App() {
     try {
       const response = await fetch(API_CHARACTER_SHEETS, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: apiHeaders(),
         body: JSON.stringify({ elements }),
       });
       const data = await response.json();
@@ -1192,7 +1219,7 @@ export default function App() {
     try {
       const response = await fetch(API_LOCATION_SHEETS, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: apiHeaders(),
         body: JSON.stringify({ elements }),
       });
       const data = await response.json();
@@ -1212,7 +1239,7 @@ export default function App() {
     try {
       const response = await fetch(API_BREAKDOWN, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: apiHeaders(),
         body: JSON.stringify({ elements }),
       });
       const data = await response.json();
@@ -1295,6 +1322,8 @@ ${elements.map((el) => {
     main:       { display: "flex", flex: 1, overflow: "hidden" },
     sidebar:    { width: "340px", flexShrink: 0, padding: "24px", borderRight: "1px solid rgba(255,255,255,.06)", display: "flex", flexDirection: "column", gap: "18px", overflowY: "auto" },
     dropzone:   { border: `2px dashed ${dragOver ? "#c8a96e" : "rgba(200,169,110,.3)"}`, borderRadius: "10px", padding: "28px 20px", textAlign: "center", cursor: "pointer", transition: "all .2s", background: dragOver ? "rgba(200,169,110,.05)" : "rgba(255,255,255,.02)" },
+    keyBox:     { background: "rgba(255,255,255,.025)", border: "1px solid rgba(255,255,255,.1)", borderRadius: "8px", padding: "12px", display: "flex", flexDirection: "column", gap: "10px" },
+    keyInput:   { width: "100%", background: "rgba(0,0,0,.22)", border: "1px solid rgba(255,255,255,.12)", borderRadius: "6px", color: "#ddd", fontFamily: "monospace", fontSize: "12px", padding: "10px", boxSizing: "border-box" },
     btn:        { background: "linear-gradient(135deg,#c8a96e,#b8994e)", color: "#0a0a0f", border: "none", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canFormat ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canFormat ? 1 : 0.4 },
     btnAnalyze: { background: canAnalyze ? "linear-gradient(135deg,#7C4DFF,#651FFF)" : "rgba(124,77,255,.15)", color: canAnalyze ? "#fff" : "#7C4DFF", border: "1px solid rgba(124,77,255,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canAnalyze ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canAnalyze ? 1 : 0.5 },
     btnSheets:    { background: canRunSheets ? "linear-gradient(135deg,#00897B,#00695C)" : "rgba(0,137,123,.15)", color: canRunSheets ? "#fff" : "#00897B", border: "1px solid rgba(0,137,123,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canRunSheets ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canRunSheets ? 1 : 0.5 },
@@ -1358,6 +1387,42 @@ ${elements.map((el) => {
               <span style={{ color: "#888", fontSize: "11px" }}>{(file.size / 1024).toFixed(0)} KB</span>
             </div>
           )}
+
+          <div style={s.keyBox}>
+            <div>
+              <div style={s.label}>API Anthropic personale</div>
+              <input
+                type={showApiKey ? "text" : "password"}
+                value={anthropicApiKey}
+                onChange={(e) => setAnthropicApiKey(e.target.value)}
+                placeholder="sk-ant-..."
+                autoComplete="off"
+                spellCheck={false}
+                style={s.keyInput}
+              />
+            </div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "6px", color: "#aaa", fontFamily: "sans-serif", fontSize: "12px", flex: 1, minWidth: "160px" }}>
+                <input
+                  type="checkbox"
+                  checked={rememberApiKey}
+                  onChange={(e) => setRememberApiKey(e.target.checked)}
+                />
+                Ricorda su questo browser
+              </label>
+              <button type="button" style={{ ...s.btnSec, flex: "0 0 auto", padding: "7px 10px", fontSize: "12px" }} onClick={() => setShowApiKey((value) => !value)}>
+                {showApiKey ? "Nascondi" : "Mostra"}
+              </button>
+              {anthropicApiKey && (
+                <button type="button" style={{ ...s.btnSec, flex: "0 0 auto", padding: "7px 10px", fontSize: "12px" }} onClick={() => { setAnthropicApiKey(""); setRememberApiKey(false); }}>
+                  Cancella
+                </button>
+              )}
+            </div>
+            <div style={{ color: "#777", fontFamily: "sans-serif", fontSize: "11px", lineHeight: "1.5" }}>
+              Se lasci vuoto questo campo, l'app userà la chiave configurata sul Worker, se presente.
+            </div>
+          </div>
 
           <div>
             <div style={s.label}>Testo grezzo</div>
