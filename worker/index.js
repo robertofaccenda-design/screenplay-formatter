@@ -177,6 +177,65 @@ REGOLE:
 - Se un'informazione non è deducibile dal testo, indica "non specificato" invece di inventare.
 - Restituisci SOLO il JSON valido, senza markdown, backtick o testo aggiuntivo.`;
 
+const BREAKDOWN_SYSTEM_PROMPT = `Sei un direttore di produzione cinematografica con 20 anni di esperienza e una solida base nell'insegnamento della produzione audiovisiva. Analizza una sceneggiatura in formato JSON e genera un breakdown completo per reparti, pronto per la pre-produzione.
+
+Restituisci ESCLUSIVAMENTE un oggetto JSON valido con questa struttura:
+
+{
+  "riepilogo": {
+    "totale_scene": <numero>,
+    "personaggi_parlanti": <numero>,
+    "location_uniche": <numero>,
+    "scene_interne": <numero>,
+    "scene_esterne": <numero>,
+    "scene_giorno": <numero>,
+    "scene_notte": <numero>,
+    "giorni_ripresa_stimati": <numero intero>,
+    "complessità_produttiva": "bassa" | "media" | "alta" | "molto_alta",
+    "note_produzione": "<valutazione globale della complessità produttiva>"
+  },
+  "per_scena": [
+    {
+      "numero": <progressivo da 1>,
+      "titolo": "<intestazione scena>",
+      "interno_esterno": "INT" | "EST" | "INT/EST",
+      "momento": "GIORNO" | "NOTTE" | "ALBA" | "TRAMONTO" | "NON_SPECIFICATO",
+      "cast": ["<NOME1>", "<NOME2>"],
+      "comparse_stimate": <numero>,
+      "props_principali": ["<prop1>", "<prop2>"],
+      "location_descrizione": "<descrizione breve della location>",
+      "complessità": "bassa" | "media" | "alta",
+      "elementi_speciali": [],
+      "note_regia": "<note operative per il set>"
+    }
+  ],
+  "reparti": {
+    "cast": [],
+    "locations": [],
+    "props": [],
+    "costumi": [],
+    "effetti_speciali": [],
+    "audio_musica": [],
+    "veicoli": []
+  },
+  "piano_riprese_suggerito": [
+    {
+      "giorno": <numero>,
+      "scene_consigliate": [<lista numeri scena>],
+      "motivazione": "<perché raggruppare queste scene>",
+      "ore_stimate": <numero>
+    }
+  ]
+}
+
+REGOLE:
+- Numera le scene in ordine progressivo usando gli elementi "scene_heading"
+- Estrai props solo da ciò che è esplicitamente menzionato nel testo
+- Per i costumi, deduci dal testo o dal contesto; se non specificato indica "non specificato"
+- Il piano riprese deve essere ottimizzato per ridurre i costi
+- Se non ci sono effetti speciali, veicoli o altri elementi opzionali, restituisci array vuoti
+- Restituisci SOLO il JSON valido, senza markdown, backtick o testo aggiuntivo.`;
+
 const MAX_INPUT_CHARS = 120000;
 const MAX_OUTPUT_ELEMENTS = 5000;
 const MAX_ELEMENT_CONTENT_CHARS = 10000;
@@ -499,6 +558,84 @@ const handleCharacterSheets = async (request, env) => {
   }
 };
 
+const serializeElementsWithScenes = (elements) => {
+  let sceneCount = 0;
+
+  return elements
+    .filter((element) => element?.type !== "blank")
+    .map((element) => {
+      if (element?.type === "scene_heading") sceneCount += 1;
+      const type = String(element?.type || "action").toUpperCase();
+      const prefix = element?.type === "scene_heading" ? `[SCENA ${sceneCount}][SCENE_HEADING]` : `[${type}]`;
+      return `${prefix} ${String(element?.content || "").slice(0, 200)}`;
+    })
+    .join("\n");
+};
+
+const handleBreakdown = async (request, env) => {
+  if (request.method === "OPTIONS") {
+    return new Response("", { status: 200, headers: jsonHeaders });
+  }
+
+  if (request.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed" }, 405);
+  }
+
+  try {
+    const rawBody = await request.text();
+    const parsedBody = safeJsonParse(rawBody || "{}");
+    const elements = parsedBody?.elements;
+
+    if (!Array.isArray(elements) || elements.length < 3) {
+      return jsonResponse({ error: "Sceneggiatura non valida o troppo breve." }, 400);
+    }
+
+    const apiKey = env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return jsonResponse({
+        error: "API key non configurata. Imposta ANTHROPIC_API_KEY nei secrets del Worker Cloudflare.",
+      }, 502);
+    }
+
+    const sceneggiatura = serializeElementsWithScenes(elements);
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 6000,
+        system: BREAKDOWN_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: "user",
+            content: `Genera il breakdown completo per reparti di questa sceneggiatura:\n\n${sceneggiatura}`,
+          },
+        ],
+      }),
+    });
+
+    const rawResponseBody = await response.text();
+    const data = safeJsonParse(rawResponseBody);
+
+    if (!response.ok) {
+      return jsonResponse({ error: extractAnthropicError(data, response.status) }, 500);
+    }
+
+    const raw = data?.content?.find((block) => block.type === "text")?.text || "{}";
+    const clean = raw.replace(/```json|```/g, "").trim();
+    const breakdown = JSON.parse(jsonrepair(clean));
+
+    return jsonResponse({ breakdown });
+  } catch (err) {
+    return jsonResponse({ error: `Errore interno: ${err.message}` }, 500);
+  }
+};
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -513,6 +650,10 @@ export default {
 
     if (url.pathname === "/api/character-sheets") {
       return handleCharacterSheets(request, env);
+    }
+
+    if (url.pathname === "/api/breakdown") {
+      return handleBreakdown(request, env);
     }
 
     if (env.ASSETS) {
