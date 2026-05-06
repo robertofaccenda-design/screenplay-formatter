@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import * as mammoth from "mammoth";
 
 const API_FORMAT           = "/api/format";
@@ -228,69 +228,120 @@ function OnboardingLanding({ onStart }) {
   );
 }
 
-function AppGuidedOnboarding({ onClose }) {
+function AppGuidedOnboarding({ onClose, targets }) {
   const [activeStep, setActiveStep] = useState(0);
   const [isNarrow, setIsNarrow] = useState(() => window.innerWidth <= 900);
+  const [desktopSteps, setDesktopSteps] = useState([]);
 
   useEffect(() => {
-    const handleResize = () => setIsNarrow(window.innerWidth <= 900);
+    const handleResize = () => {
+      setIsNarrow(window.innerWidth <= 900);
+    };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const steps = [
+  const stepCopy = [
     {
       title: "Benvenuto in Screenplay Formatter AI",
       text: "Questa schermata è il punto di lavoro: qui trasformi una bozza in sceneggiatura, analisi e schede operative.",
       color: "#8B5CF6",
-      top: 84,
-      left: "calc(100% - 254px)",
-      line: { x1: "78%", y1: 120, x2: "92%", y2: 72 },
-      highlight: { left: "calc(100% - 118px)", top: 48, width: 96, height: 42 },
+      target: "onboarding",
     },
     {
       title: "Carica il tuo file",
       text: "Trascina qui TXT, DOCX o DOC. Il sistema accetta solo testi che sembrano sceneggiature.",
       color: "#8B5CF6",
-      top: 132,
-      left: 300,
-      line: { x1: 300, y1: 168, x2: 256, y2: 198 },
-      highlight: { left: 8, top: 116, width: 252, height: 170 },
+      target: "dropzone",
     },
     {
       title: "Configura la tua API",
       text: "Inserisci la tua chiave Anthropic personale. Se scegli di ricordarla, resta solo nel tuo browser.",
       color: "#22C55E",
-      top: 258,
-      left: 300,
-      line: { x1: 300, y1: 300, x2: 256, y2: 352 },
-      highlight: { left: 8, top: 294, width: 252, height: 118 },
+      target: "apiKey",
     },
     {
       title: "Incolla il testo",
       text: "Puoi anche lavorare senza file: incolla direttamente qui una scena o una bozza.",
       color: "#FACC15",
-      top: 382,
-      left: 300,
-      line: { x1: 300, y1: 424, x2: 256, y2: 500 },
-      highlight: { left: 8, top: 428, width: 252, height: 142 },
+      target: "rawText",
     },
     {
       title: "Formatta e analizza",
       text: "Una volta inserito il testo, avvia la formattazione. Dopo compariranno analisi, schede e breakdown.",
       color: "#38BDF8",
-      top: 552,
-      left: 300,
-      line: { x1: 300, y1: 592, x2: 256, y2: 620 },
-      highlight: { left: 8, top: 578, width: 252, height: 48 },
+      target: "formatButton",
     },
   ];
+
+  useEffect(() => {
+    const cardWidth = 286;
+    const cardGap = 44;
+    const margin = 18;
+    const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+    const getRect = (key) => targets?.[key]?.current?.getBoundingClientRect();
+
+    const measure = () => {
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      const measured = stepCopy.map((step, index) => {
+        const rect = getRect(step.target);
+        if (!rect) return null;
+
+        const highlight = {
+          left: rect.left - 2,
+          top: rect.top - 2,
+          width: rect.width + 4,
+          height: rect.height + 4,
+        };
+
+        const cardLeft = index === 0
+          ? clamp(rect.left - cardWidth - 34, margin, viewportWidth - cardWidth - margin)
+          : clamp(rect.right + cardGap, margin, viewportWidth - cardWidth - margin);
+        const cardTop = index === 0
+          ? clamp(rect.bottom + 16, margin, viewportHeight - 172)
+          : clamp(rect.top + (rect.height / 2) - 66, 108, viewportHeight - 172);
+
+        return {
+          ...step,
+          top: cardTop,
+          left: cardLeft,
+          highlight,
+          line: index === 0
+            ? {
+                x1: cardLeft + cardWidth,
+                y1: cardTop + 44,
+                x2: rect.left + (rect.width / 2),
+                y2: rect.top + (rect.height / 2),
+              }
+            : {
+                x1: cardLeft,
+                y1: cardTop + 44,
+                x2: rect.right - 10,
+                y2: rect.top + (rect.height / 2),
+              },
+        };
+      }).filter(Boolean);
+
+      setDesktopSteps(measured);
+    };
+
+    measure();
+    const id = window.setTimeout(measure, 80);
+    window.addEventListener("resize", measure);
+    return () => {
+      window.clearTimeout(id);
+      window.removeEventListener("resize", measure);
+    };
+  }, [targets]);
 
   const finishTour = () => {
     window.localStorage.setItem(APP_TOUR_STORAGE, "true");
     onClose();
   };
 
+  const steps = desktopSteps.length === stepCopy.length ? desktopSteps : stepCopy;
   const active = steps[activeStep];
 
   if (isNarrow) {
@@ -315,6 +366,8 @@ function AppGuidedOnboarding({ onClose }) {
       </div>
     );
   }
+
+  if (desktopSteps.length !== stepCopy.length) return null;
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 50, pointerEvents: "none" }}>
@@ -1396,6 +1449,18 @@ export default function App() {
   const [rememberApiKey, setRememberApiKey] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const fileInputRef = useRef();
+  const onboardingButtonRef = useRef();
+  const dropzoneRef = useRef();
+  const apiKeyBoxRef = useRef();
+  const rawTextBoxRef = useRef();
+  const formatButtonRef = useRef();
+  const tourTargets = useMemo(() => ({
+    onboarding: onboardingButtonRef,
+    dropzone: dropzoneRef,
+    apiKey: apiKeyBoxRef,
+    rawText: rawTextBoxRef,
+    formatButton: formatButtonRef,
+  }), []);
 
   const completeOnboarding = () => {
     window.localStorage.setItem(ONBOARDING_STORAGE, "true");
@@ -1674,7 +1739,7 @@ ${elements.map((el) => {
           <div style={{ fontSize: "20px", fontWeight: "bold", letterSpacing: ".5px", color: "#f0ead8" }}>Screenplay Formatter AI</div>
           <div style={{ fontSize: "12px", color: "#888", marginTop: "2px", fontFamily: "sans-serif", letterSpacing: "1px", textTransform: "uppercase" }}>Formattazione · Analisi drammaturgica · Standard cinematografico</div>
         </div>
-        <button type="button" onClick={openOnboarding} style={{ marginLeft: "auto", background: "rgba(255,255,255,.06)", color: "#ccc", border: "1px solid rgba(255,255,255,.12)", borderRadius: "7px", padding: "8px 12px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", fontFamily: "sans-serif" }}>
+        <button ref={onboardingButtonRef} type="button" onClick={openOnboarding} style={{ marginLeft: "auto", background: "rgba(255,255,255,.06)", color: "#ccc", border: "1px solid rgba(255,255,255,.12)", borderRadius: "7px", padding: "8px 12px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", fontFamily: "sans-serif" }}>
           Onboarding
         </button>
       </div>
@@ -1682,7 +1747,7 @@ ${elements.map((el) => {
       <div style={s.main}>
         {/* SIDEBAR */}
         <div style={s.sidebar}>
-          <div style={s.dropzone} onDrop={handleDrop} onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onClick={() => fileInputRef.current?.click()}>
+          <div ref={dropzoneRef} style={s.dropzone} onDrop={handleDrop} onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onClick={() => fileInputRef.current?.click()}>
             <div style={{ fontSize: "36px", marginBottom: "8px" }}>📄</div>
             <div style={{ fontSize: "13px", color: "#aaa", fontFamily: "sans-serif", lineHeight: "1.6" }}>
               Trascina qui il tuo file<br />
@@ -1700,7 +1765,7 @@ ${elements.map((el) => {
             </div>
           )}
 
-          <div style={s.keyBox}>
+          <div ref={apiKeyBoxRef} style={s.keyBox}>
             <div>
               <div style={s.label}>API Anthropic personale</div>
               <input
@@ -1736,7 +1801,7 @@ ${elements.map((el) => {
             </div>
           </div>
 
-          <div>
+          <div ref={rawTextBoxRef}>
             <div style={s.label}>Testo grezzo</div>
             <textarea
               style={{ width: "100%", height: "160px", background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.1)", borderRadius: "8px", color: "#ccc", fontFamily: "monospace", fontSize: "12px", padding: "12px", resize: "vertical", boxSizing: "border-box", lineHeight: "1.5" }}
@@ -1749,7 +1814,7 @@ ${elements.map((el) => {
           {error && <div style={s.error}>⚠️ {error}</div>}
 
           {/* Pulsante Formatta */}
-          <button style={s.btn} disabled={!canFormat} onClick={runFormatter}>
+          <button ref={formatButtonRef} style={s.btn} disabled={!canFormat} onClick={runFormatter}>
             {loading ? "Formattazione in corso..." : "Formatta Sceneggiatura"}
           </button>
 
@@ -1960,7 +2025,12 @@ ${elements.map((el) => {
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 3px; }
       `}</style>
 
-      {showAppTour && <AppGuidedOnboarding onClose={() => setShowAppTour(false)} />}
+      {showAppTour && (
+        <AppGuidedOnboarding
+          onClose={() => setShowAppTour(false)}
+          targets={tourTargets}
+        />
+      )}
     </div>
   );
 }
