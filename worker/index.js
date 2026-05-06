@@ -327,6 +327,7 @@ REGOLE:
 const MAX_INPUT_CHARS = 120000;
 const MAX_OUTPUT_ELEMENTS = 5000;
 const MAX_ELEMENT_CONTENT_CHARS = 10000;
+const MIN_SCREENPLAY_SCORE = 5;
 const ALLOWED_ELEMENT_TYPES = new Set([
   "scene_heading",
   "action",
@@ -372,6 +373,73 @@ const getAnthropicApiKey = (request, env) => {
 const missingApiKeyResponse = () => jsonResponse({
   error: "API key Anthropic non configurata. Inserisci la tua chiave personale nell'app oppure imposta ANTHROPIC_API_KEY nei secrets del Worker Cloudflare.",
 }, 502);
+
+const countMatches = (text, pattern) => (text.match(pattern) || []).length;
+
+const validateScreenplayInput = (text) => {
+  const normalized = text.replace(/\r/g, "\n").trim();
+  const lower = normalized.toLowerCase();
+  const lines = normalized
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const sceneHeadingCount = lines.filter((line) => (
+    /^(?:int\.\/est\.?|int\.?|est\.?|i\/e|interno|esterno)(?:\s|$|[-–.])/i.test(line)
+  )).length;
+
+  const transitionCount = lines.filter((line) => (
+    /^(cut to:|fade in:|fade out:|dissolvenza|stacco a:|taglio a:|fonduta|nero\.)$/i.test(line)
+  )).length;
+
+  const parentheticalCount = lines.filter((line) => (
+    /^\(.{2,80}\)$/.test(line)
+  )).length;
+
+  let dialogueCueCount = 0;
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    const current = lines[index];
+    const next = lines[index + 1];
+    const looksLikeCharacter = /^[A-ZÀ-ÖØ-Þ0-9][A-ZÀ-ÖØ-Þ0-9 '’.-]{1,34}$/.test(current)
+      && !/[.!?;:]$/.test(current)
+      && !/^(INT|EST|INTERNO|ESTERNO)\b/i.test(current);
+    const looksLikeDialogue = next.length >= 3
+      && next.length <= 220
+      && !/^(INT|EST|INTERNO|ESTERNO)\b/i.test(next);
+
+    if (looksLikeCharacter && looksLikeDialogue) dialogueCueCount += 1;
+  }
+
+  const screenplayTermCount = countMatches(
+    lower,
+    /\b(sceneggiatura|scena|personaggio|dialogo|voce fuori campo|v\.o\.|o\.s\.|campo|controcampo|dissolvenza|soggettiva|inquadratura)\b/g,
+  );
+
+  const administrativeTermCount = countMatches(
+    lower,
+    /\b(bando|avviso pubblico|capitolato|graduatoria|protocollo|determina|cig|cup|requisiti|domanda di partecipazione|scadenza|finanziamento|amministrazione|procedura|allegato|articolo|comma|ente pubblico|decreto|delibera)\b/g,
+  );
+
+  const screenplayScore = (sceneHeadingCount * 3)
+    + (dialogueCueCount * 2)
+    + transitionCount
+    + Math.min(parentheticalCount, 4)
+    + Math.min(screenplayTermCount, 4);
+
+  if (administrativeTermCount >= 3 && screenplayScore < 10) {
+    return {
+      error: "Il documento sembra un bando o un testo amministrativo, non una sceneggiatura. Carica o incolla solo scene, dialoghi o testi narrativi in forma di sceneggiatura.",
+    };
+  }
+
+  if (screenplayScore < MIN_SCREENPLAY_SCORE) {
+    return {
+      error: "Il testo non sembra una sceneggiatura. Inserisci un testo con intestazioni di scena, personaggi e dialoghi prima di avviare la formattazione.",
+    };
+  }
+
+  return { ok: true };
+};
 
 const parseElementsFromTextBlock = (textBlock) => {
   if (!textBlock || typeof textBlock !== "string") return null;
@@ -458,6 +526,11 @@ const handleFormat = async (request, env) => {
 
     if (text.length > MAX_INPUT_CHARS) {
       return jsonResponse({ error: "Testo troppo lungo. Riduci il contenuto e riprova." }, 413);
+    }
+
+    const screenplayValidation = validateScreenplayInput(text);
+    if (screenplayValidation.error) {
+      return jsonResponse({ error: screenplayValidation.error }, 422);
     }
 
     const apiKey = getAnthropicApiKey(request, env);
