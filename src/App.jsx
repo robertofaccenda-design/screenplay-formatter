@@ -279,10 +279,10 @@ function AppGuidedOnboarding({ onClose }) {
       title: "Formatta e analizza",
       text: "Una volta inserito il testo, avvia la formattazione. Dopo compariranno analisi, schede e breakdown.",
       color: "#38BDF8",
-      top: 506,
+      top: 552,
       left: 440,
-      line: { x1: 440, y1: 546, x2: 128, y2: 602 },
-      highlight: { left: 8, top: 578, width: 252, height: 48 },
+      line: { x1: 440, y1: 592, x2: 128, y2: 664 },
+      highlight: { left: 8, top: 640, width: 252, height: 48 },
     },
   ];
 
