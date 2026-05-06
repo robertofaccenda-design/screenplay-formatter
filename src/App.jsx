@@ -253,8 +253,8 @@ function AppGuidedOnboarding({ onClose }) {
       text: "Trascina qui TXT, DOCX o DOC. Il sistema accetta solo testi che sembrano sceneggiature.",
       color: "#8B5CF6",
       top: 132,
-      left: 330,
-      line: { x1: 330, y1: 170, x2: 128, y2: 196 },
+      left: 440,
+      line: { x1: 440, y1: 170, x2: 128, y2: 196 },
       highlight: { left: 8, top: 116, width: 252, height: 170 },
     },
     {
@@ -262,8 +262,8 @@ function AppGuidedOnboarding({ onClose }) {
       text: "Inserisci la tua chiave Anthropic personale. Se scegli di ricordarla, resta solo nel tuo browser.",
       color: "#22C55E",
       top: 258,
-      left: 330,
-      line: { x1: 330, y1: 298, x2: 128, y2: 352 },
+      left: 440,
+      line: { x1: 440, y1: 298, x2: 128, y2: 352 },
       highlight: { left: 8, top: 294, width: 252, height: 118 },
     },
     {
@@ -271,8 +271,8 @@ function AppGuidedOnboarding({ onClose }) {
       text: "Puoi anche lavorare senza file: incolla direttamente qui una scena o una bozza.",
       color: "#FACC15",
       top: 382,
-      left: 330,
-      line: { x1: 330, y1: 422, x2: 128, y2: 504 },
+      left: 440,
+      line: { x1: 440, y1: 422, x2: 128, y2: 504 },
       highlight: { left: 8, top: 428, width: 252, height: 142 },
     },
     {
@@ -280,8 +280,8 @@ function AppGuidedOnboarding({ onClose }) {
       text: "Una volta inserito il testo, avvia la formattazione. Dopo compariranno analisi, schede e breakdown.",
       color: "#38BDF8",
       top: 506,
-      left: 330,
-      line: { x1: 330, y1: 546, x2: 128, y2: 602 },
+      left: 440,
+      line: { x1: 440, y1: 546, x2: 128, y2: 602 },
       highlight: { left: 8, top: 578, width: 252, height: 48 },
     },
   ];
