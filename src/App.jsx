@@ -363,10 +363,10 @@ function SchedePersonaggio({ data }) {
 
         {/* Sub-sezioni */}
         <div style={{ display: "flex", gap: "4px", marginBottom: "16px", flexWrap: "wrap" }}>
-          {secBtn("narrativo", "📖 Profilo narrativo", activeSection === "narrativo")}
-          {secBtn("relazioni", "🔗 Relazioni", activeSection === "relazioni")}
-          {secBtn("produzione", "🎬 Produzione", activeSection === "produzione")}
-          {secBtn("didattica", "🎓 Didattica", activeSection === "didattica")}
+          {secBtn("narrativo", "Profilo narrativo", activeSection === "narrativo")}
+          {secBtn("relazioni", "Relazioni", activeSection === "relazioni")}
+          {secBtn("produzione", "Produzione", activeSection === "produzione")}
+          {secBtn("didattica", "Didattica", activeSection === "didattica")}
         </div>
 
         {/* Profilo narrativo */}
@@ -613,11 +613,11 @@ function SchedeLocation({ data }) {
 
         {/* Sub-sezioni */}
         <div style={{ display: "flex", gap: "4px", marginBottom: "16px", flexWrap: "wrap" }}>
-          {secBtn("narrativa",   "📖 Narrativa",   activeSection === "narrativa")}
-          {secBtn("tecnica",     "⚙️ Tecnica",      activeSection === "tecnica")}
-          {secBtn("scouting",    "🔍 Scouting",     activeSection === "scouting")}
-          {secBtn("fotografia",  "📷 Fotografia",   activeSection === "fotografia")}
-          {secBtn("didattica",   "🎓 Didattica",    activeSection === "didattica")}
+          {secBtn("narrativa",   "Narrativa",   activeSection === "narrativa")}
+          {secBtn("tecnica",     "Tecnica",      activeSection === "tecnica")}
+          {secBtn("scouting",    "Scouting",     activeSection === "scouting")}
+          {secBtn("fotografia",  "Fotografia",   activeSection === "fotografia")}
+          {secBtn("didattica",   "Didattica",    activeSection === "didattica")}
         </div>
 
         {/* Narrativa */}
@@ -841,15 +841,15 @@ function BreakdownPanel({ data }) {
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* Sub-tab */}
       <div style={{ display: "flex", padding: "10px 20px 0", gap: "4px", borderBottom: "1px solid rgba(255,255,255,.05)", flexWrap: "wrap" }}>
-        {tabBtn("riepilogo", "📊 Riepilogo", 0)}
-        {tabBtn("scene",     "🎬 Per scena", per_scena?.length || 0)}
-        {tabBtn("cast",      "👥 Cast",      reparti?.cast?.length || 0)}
-        {tabBtn("locations", "📍 Location",  reparti?.locations?.length || 0)}
-        {tabBtn("props",     "🎭 Props",     reparti?.props?.length || 0)}
-        {tabBtn("costumi",   "👔 Costumi",   reparti?.costumi?.length || 0)}
+        {tabBtn("riepilogo", "Riepilogo", 0)}
+        {tabBtn("scene",     "Per scena", per_scena?.length || 0)}
+        {tabBtn("cast",      "Cast",      reparti?.cast?.length || 0)}
+        {tabBtn("locations", "Location",  reparti?.locations?.length || 0)}
+        {tabBtn("props",     "Props",     reparti?.props?.length || 0)}
+        {tabBtn("costumi",   "Costumi",   reparti?.costumi?.length || 0)}
         {(reparti?.effetti_speciali?.length > 0 || reparti?.veicoli?.length > 0) &&
-          tabBtn("extra", "⚡ Extra", (reparti?.effetti_speciali?.length || 0) + (reparti?.veicoli?.length || 0))}
-        {piano_riprese_suggerito?.length > 0 && tabBtn("piano", "📅 Piano riprese", piano_riprese_suggerito?.length || 0)}
+          tabBtn("extra", "Extra", (reparti?.effetti_speciali?.length || 0) + (reparti?.veicoli?.length || 0))}
+        {piano_riprese_suggerito?.length > 0 && tabBtn("piano", "Piano riprese", piano_riprese_suggerito?.length || 0)}
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
@@ -1373,28 +1373,28 @@ ${elements.map((el) => {
 
           {/* Pulsante Formatta */}
           <button style={s.btn} disabled={!canFormat} onClick={runFormatter}>
-            {loading ? "⏳ Formattazione in corso..." : "✨ Formatta Sceneggiatura"}
+            {loading ? "Formattazione in corso..." : "Formatta Sceneggiatura"}
           </button>
 
           {/* Pulsanti AI — appaiono solo dopo la formattazione */}
           {elements && (
             <button style={s.btnAnalyze} disabled={!canAnalyze} onClick={runAnalysis}>
-              {analyzing ? "🔍 Analisi in corso..." : "🎭 Analisi Drammaturgica"}
+              {analyzing ? "Analisi in corso..." : "Analisi Drammaturgica"}
             </button>
           )}
           {elements && (
             <button style={s.btnSheets} disabled={!canRunSheets} onClick={runCharacterSheets}>
-              {loadingSheets ? "⏳ Generazione schede..." : "📋 Schede Personaggio"}
+              {loadingSheets ? "Generazione schede..." : "Schede Personaggio"}
             </button>
           )}
           {elements && (
             <button style={s.btnBreakdown} disabled={!canRunBreakdown} onClick={runBreakdown}>
-              {loadingBreakdown ? "⏳ Breakdown in corso..." : "🎬 Breakdown Reparti"}
+              {loadingBreakdown ? "Breakdown in corso..." : "Breakdown Reparti"}
             </button>
           )}
           {elements && (
             <button style={s.btnLocations} disabled={busy} onClick={runLocationSheets}>
-              {loadingLocations ? "⏳ Schede location..." : "📍 Schede Location"}
+              {loadingLocations ? "Schede location..." : "Schede Location"}
             </button>
           )}
 
@@ -1425,8 +1425,8 @@ ${elements.map((el) => {
             <div>
               <div style={{ ...s.label, marginBottom: "8px" }}>Esporta</div>
               <div style={{ display: "flex", gap: "8px" }}>
-                <button style={s.btnSec} onClick={downloadFountain}>⬇ .fountain</button>
-                <button style={s.btnSec} onClick={downloadHtml}>⬇ .html</button>
+                <button style={s.btnSec} onClick={downloadFountain}>.fountain</button>
+                <button style={s.btnSec} onClick={downloadHtml}>.html</button>
               </div>
               <div style={{ fontSize: "10px", color: "#555", fontFamily: "sans-serif", marginTop: "6px" }}>
                 .fountain → Final Draft, Fade In · .html → stampa/PDF
@@ -1440,13 +1440,13 @@ ${elements.map((el) => {
           {/* Tab bar principale */}
           {elements && (
             <div style={s.tabs}>
-              {tabBtn("preview", "📄 Anteprima", activeTab === "preview")}
-              {tabBtn("struttura", "🏗 Struttura", activeTab === "struttura")}
-              {tabBtn("fountain", "📝 Fountain", activeTab === "fountain")}
-              {analysis && tabBtn("analisi", "🎭 Analisi", activeTab === "analisi")}
-              {characterSheets && tabBtn("schede", "📋 Schede", activeTab === "schede")}
-              {breakdown && tabBtn("breakdown", "🎬 Breakdown", activeTab === "breakdown")}
-              {locationSheets && tabBtn("locations", "📍 Location", activeTab === "locations")}
+              {tabBtn("preview", "Anteprima", activeTab === "preview")}
+              {tabBtn("struttura", "Struttura", activeTab === "struttura")}
+              {tabBtn("fountain", "Fountain", activeTab === "fountain")}
+              {analysis && tabBtn("analisi", "Analisi", activeTab === "analisi")}
+              {characterSheets && tabBtn("schede", "Schede", activeTab === "schede")}
+              {breakdown && tabBtn("breakdown", "Breakdown", activeTab === "breakdown")}
+              {locationSheets && tabBtn("locations", "Location", activeTab === "locations")}
             </div>
           )}
 
@@ -1557,11 +1557,11 @@ ${elements.map((el) => {
               <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
                 {/* Sub-tab analisi */}
                 <div style={{ display: "flex", padding: "12px 24px 0", gap: "4px", borderBottom: "1px solid rgba(255,255,255,.04)", flexWrap: "wrap" }}>
-                  {analyTabBtn("struttura", "🏛 Struttura", analyTab === "struttura", 0)}
-                  {analyTabBtn("personaggi", "👤 Personaggi", analyTab === "personaggi", 0)}
-                  {analyTabBtn("scene", "🎬 Scene", analyTab === "scene", analysis.analisi_scene?.filter(s => s.problemi?.length > 0).length)}
-                  {analyTabBtn("segnalazioni", "⚠ Segnalazioni", analyTab === "segnalazioni", segnalazioniCount)}
-                  {analyTabBtn("valutazione", "📊 Valutazione", analyTab === "valutazione", 0)}
+                  {analyTabBtn("struttura", "Struttura", analyTab === "struttura", 0)}
+                  {analyTabBtn("personaggi", "Personaggi", analyTab === "personaggi", 0)}
+                  {analyTabBtn("scene", "Scene", analyTab === "scene", analysis.analisi_scene?.filter(s => s.problemi?.length > 0).length)}
+                  {analyTabBtn("segnalazioni", "Segnalazioni", analyTab === "segnalazioni", segnalazioniCount)}
+                  {analyTabBtn("valutazione", "Valutazione", analyTab === "valutazione", 0)}
                 </div>
                 <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
                   {analyTab === "struttura"   && <StrutturaAtti struttura={analysis.struttura} />}
