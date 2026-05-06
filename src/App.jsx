@@ -372,36 +372,34 @@ function AppGuidedOnboarding({ onClose, targets }) {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 50, pointerEvents: "none" }}>
       <svg width="100%" height="100%" style={{ position: "absolute", inset: 0, overflow: "visible" }}>
-        {steps.map((step) => (
-          <line
-            key={step.title}
-            x1={step.line.x1}
-            y1={step.line.y1}
-            x2={step.line.x2}
-            y2={step.line.y2}
-            stroke={step.color}
-            strokeWidth={3}
-            opacity={1}
-          />
-        ))}
+        <line
+          x1={active.line.x1}
+          y1={active.line.y1}
+          x2={active.line.x2}
+          y2={active.line.y2}
+          stroke={active.color}
+          strokeWidth={3}
+          opacity={1}
+        />
       </svg>
 
-      {steps.map((step) => (
-        <div key={step.title} style={{ position: "absolute", left: step.highlight.left, top: step.highlight.top, width: step.highlight.width, height: step.highlight.height, border: `2px solid ${step.color}`, borderRadius: "8px", boxShadow: `0 0 0 1px ${step.color}44, 0 0 30px ${step.color}44`, background: "rgba(255,255,255,.02)" }} />
-      ))}
+      <div style={{ position: "absolute", left: active.highlight.left, top: active.highlight.top, width: active.highlight.width, height: active.highlight.height, border: `2px solid ${active.color}`, borderRadius: "8px", boxShadow: `0 0 0 1px ${active.color}44, 0 0 30px ${active.color}44`, background: "rgba(255,255,255,.02)" }} />
 
-      {steps.map((step, index) => (
-        <div key={step.title} style={{ position: "absolute", top: step.top, left: step.left, width: 212, background: "rgba(13,13,22,.96)", border: `2px solid ${step.color}`, borderRadius: "8px", padding: "12px 12px 10px", boxShadow: `0 18px 42px rgba(0,0,0,.42), 0 0 22px ${step.color}44`, pointerEvents: "auto" }}>
-          <div style={{ position: "absolute", left: -12, top: -12, width: 24, height: 24, borderRadius: "50%", background: step.color, color: "#08080d", display: "grid", placeItems: "center", fontFamily: "sans-serif", fontSize: "12px", fontWeight: "bold" }}>{index + 1}</div>
-          <div style={{ color: "#fff", fontFamily: "sans-serif", fontSize: "12px", fontWeight: "bold", marginBottom: "6px" }}>{step.title}</div>
-          <div style={{ color: "#aeb4c4", fontFamily: "sans-serif", fontSize: "11px", lineHeight: 1.45, marginBottom: "10px" }}>{step.text}</div>
-          {index < steps.length - 1 ? (
-            <button type="button" onClick={() => setActiveStep(Math.min(steps.length - 1, index + 1))} style={{ border: "none", background: step.color, color: "#08080d", borderRadius: "5px", padding: "6px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>Avanti</button>
+      <div style={{ position: "absolute", top: active.top, left: active.left, width: 212, background: "rgba(13,13,22,.96)", border: `2px solid ${active.color}`, borderRadius: "8px", padding: "12px 12px 10px", boxShadow: `0 18px 42px rgba(0,0,0,.42), 0 0 22px ${active.color}44`, pointerEvents: "auto" }}>
+        <div style={{ position: "absolute", left: -12, top: -12, width: 24, height: 24, borderRadius: "50%", background: active.color, color: "#08080d", display: "grid", placeItems: "center", fontFamily: "sans-serif", fontSize: "12px", fontWeight: "bold" }}>{activeStep + 1}</div>
+        <div style={{ color: "#fff", fontFamily: "sans-serif", fontSize: "12px", fontWeight: "bold", marginBottom: "6px" }}>{active.title}</div>
+        <div style={{ color: "#aeb4c4", fontFamily: "sans-serif", fontSize: "11px", lineHeight: 1.45, marginBottom: "10px" }}>{active.text}</div>
+        <div style={{ display: "flex", gap: "6px" }}>
+          {activeStep > 0 && (
+            <button type="button" onClick={() => setActiveStep(activeStep - 1)} style={{ border: "1px solid rgba(255,255,255,.16)", background: "rgba(255,255,255,.07)", color: "#ddd", borderRadius: "5px", padding: "6px 8px", fontSize: "11px", cursor: "pointer" }}>Indietro</button>
+          )}
+          {activeStep < steps.length - 1 ? (
+            <button type="button" onClick={() => setActiveStep(activeStep + 1)} style={{ border: "none", background: active.color, color: "#08080d", borderRadius: "5px", padding: "6px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>Avanti</button>
           ) : (
-            <button type="button" onClick={finishTour} style={{ border: "none", background: step.color, color: "#08080d", borderRadius: "5px", padding: "6px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>Ho capito</button>
+            <button type="button" onClick={finishTour} style={{ border: "none", background: active.color, color: "#08080d", borderRadius: "5px", padding: "6px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>Ho capito</button>
           )}
         </div>
-      ))}
+      </div>
 
       <div style={{ position: "absolute", right: 22, bottom: 22, width: 178, background: "rgba(16,16,24,.94)", border: "1px solid rgba(255,255,255,.12)", borderRadius: "8px", padding: "12px", pointerEvents: "auto", fontFamily: "sans-serif", boxShadow: "0 16px 42px rgba(0,0,0,.35)" }}>
         <div style={{ color: "#fff", fontSize: "12px", fontWeight: "bold", marginBottom: "4px" }}>Consiglio</div>
