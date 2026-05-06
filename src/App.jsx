@@ -8,6 +8,7 @@ const API_BREAKDOWN        = "/api/breakdown";
 const API_LOCATION_SHEETS  = "/api/location-sheets";
 const ANTHROPIC_KEY_STORAGE = "screenplayFormatter.anthropicApiKey";
 const ONBOARDING_STORAGE = "screenplayFormatter.onboardingComplete";
+const APP_TOUR_STORAGE = "screenplayFormatter.appTourComplete";
 
 // ─── Colori per tipi elemento ───────────────────────────────────────────────
 const typeLabels = {
@@ -223,6 +224,141 @@ function OnboardingLanding({ onStart }) {
           button { min-height: 42px; }
         }
       `}</style>
+    </div>
+  );
+}
+
+function AppGuidedOnboarding({ onClose }) {
+  const [activeStep, setActiveStep] = useState(0);
+  const [isNarrow, setIsNarrow] = useState(() => window.innerWidth <= 900);
+
+  useEffect(() => {
+    const handleResize = () => setIsNarrow(window.innerWidth <= 900);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const steps = [
+    {
+      title: "Benvenuto in Screenplay Formatter AI",
+      text: "Questa schermata è il punto di lavoro: qui trasformi una bozza in sceneggiatura, analisi e schede operative.",
+      color: "#8B5CF6",
+      top: 86,
+      left: "calc(100% - 250px)",
+      line: { x1: "82%", y1: 122, x2: "94%", y2: 70 },
+    },
+    {
+      title: "Carica il tuo file",
+      text: "Trascina qui TXT, DOCX o DOC. Il sistema accetta solo testi che sembrano sceneggiature.",
+      color: "#8B5CF6",
+      top: 122,
+      left: 150,
+      line: { x1: 152, y1: 166, x2: 122, y2: 214 },
+    },
+    {
+      title: "Configura la tua API",
+      text: "Inserisci la tua chiave Anthropic personale. Se scegli di ricordarla, resta solo nel tuo browser.",
+      color: "#22C55E",
+      top: 284,
+      left: 150,
+      line: { x1: 150, y1: 322, x2: 124, y2: 352 },
+    },
+    {
+      title: "Incolla il testo",
+      text: "Puoi anche lavorare senza file: incolla direttamente qui una scena o una bozza.",
+      color: "#FACC15",
+      top: 432,
+      left: 150,
+      line: { x1: 150, y1: 470, x2: 124, y2: 504 },
+    },
+    {
+      title: "Formatta e analizza",
+      text: "Una volta inserito il testo, avvia la formattazione. Dopo compariranno analisi, schede e breakdown.",
+      color: "#38BDF8",
+      top: 562,
+      left: 150,
+      line: { x1: 150, y1: 602, x2: 124, y2: 636 },
+    },
+  ];
+
+  const finishTour = () => {
+    window.localStorage.setItem(APP_TOUR_STORAGE, "true");
+    onClose();
+  };
+
+  const active = steps[activeStep];
+
+  if (isNarrow) {
+    return (
+      <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(5,5,10,.78)", display: "flex", alignItems: "flex-end", pointerEvents: "auto" }}>
+        <div style={{ width: "100%", background: "#111118", borderTop: `2px solid ${active.color}`, padding: "18px", boxSizing: "border-box", boxShadow: "0 -18px 40px rgba(0,0,0,.45)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+            <span style={{ width: "26px", height: "26px", borderRadius: "50%", background: active.color, color: "#08080d", display: "grid", placeItems: "center", fontWeight: "bold", fontFamily: "sans-serif", fontSize: "13px" }}>{activeStep + 1}</span>
+            <strong style={{ color: "#fff", fontFamily: "sans-serif", fontSize: "14px" }}>{active.title}</strong>
+          </div>
+          <div style={{ color: "#b8bdca", fontFamily: "sans-serif", fontSize: "13px", lineHeight: 1.55, marginBottom: "14px" }}>{active.text}</div>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button type="button" onClick={() => setActiveStep(Math.max(0, activeStep - 1))} disabled={activeStep === 0} style={{ flex: 1, border: "1px solid rgba(255,255,255,.14)", background: "rgba(255,255,255,.06)", color: "#ddd", borderRadius: "7px", padding: "10px", opacity: activeStep === 0 ? .45 : 1 }}>Indietro</button>
+            {activeStep < steps.length - 1 ? (
+              <button type="button" onClick={() => setActiveStep(activeStep + 1)} style={{ flex: 1, border: "none", background: active.color, color: "#08080d", borderRadius: "7px", padding: "10px", fontWeight: "bold" }}>Avanti</button>
+            ) : (
+              <button type="button" onClick={finishTour} style={{ flex: 1, border: "none", background: active.color, color: "#08080d", borderRadius: "7px", padding: "10px", fontWeight: "bold" }}>Ho capito</button>
+            )}
+            <button type="button" onClick={finishTour} style={{ border: "1px solid rgba(255,255,255,.14)", background: "transparent", color: "#aaa", borderRadius: "7px", padding: "10px 12px" }}>Salta</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 50, pointerEvents: "none" }}>
+      <svg width="100%" height="100%" style={{ position: "absolute", inset: 0, overflow: "visible" }}>
+        {steps.map((step, index) => (
+          <line
+            key={step.title}
+            x1={step.line.x1}
+            y1={step.line.y1}
+            x2={step.line.x2}
+            y2={step.line.y2}
+            stroke={step.color}
+            strokeWidth={activeStep === index ? 3 : 1.5}
+            opacity={activeStep === index ? 1 : .55}
+          />
+        ))}
+      </svg>
+
+      <div style={{ position: "absolute", left: 8, top: 116, width: 252, height: 170, border: "2px solid #8B5CF6", borderRadius: "8px", boxShadow: "0 0 0 1px rgba(139,92,246,.25), 0 0 28px rgba(139,92,246,.18)" }} />
+      <div style={{ position: "absolute", left: 8, top: 294, width: 252, height: 118, border: "2px solid #22C55E", borderRadius: "8px", boxShadow: "0 0 0 1px rgba(34,197,94,.25), 0 0 28px rgba(34,197,94,.14)" }} />
+      <div style={{ position: "absolute", left: 8, top: 428, width: 252, height: 142, border: "2px solid #FACC15", borderRadius: "8px", boxShadow: "0 0 0 1px rgba(250,204,21,.25), 0 0 28px rgba(250,204,21,.14)" }} />
+      <div style={{ position: "absolute", left: 8, top: 578, width: 252, height: 48, border: "2px solid #38BDF8", borderRadius: "8px", boxShadow: "0 0 0 1px rgba(56,189,248,.25), 0 0 28px rgba(56,189,248,.16)" }} />
+
+      {steps.map((step, index) => {
+        const isActive = activeStep === index;
+        return (
+          <div key={step.title} style={{ position: "absolute", top: step.top, left: step.left, width: 216, background: "rgba(13,13,22,.96)", border: `2px solid ${step.color}`, borderRadius: "8px", padding: "12px 12px 10px", boxShadow: `0 18px 42px rgba(0,0,0,.45), 0 0 ${isActive ? 28 : 0}px ${step.color}55`, opacity: isActive ? 1 : .78, pointerEvents: "auto" }}>
+            <div style={{ position: "absolute", left: -12, top: -12, width: 24, height: 24, borderRadius: "50%", background: step.color, color: "#08080d", display: "grid", placeItems: "center", fontFamily: "sans-serif", fontSize: "12px", fontWeight: "bold" }}>{index + 1}</div>
+            <div style={{ color: "#fff", fontFamily: "sans-serif", fontSize: "12px", fontWeight: "bold", marginBottom: "6px" }}>{step.title}</div>
+            <div style={{ color: "#aeb4c4", fontFamily: "sans-serif", fontSize: "11px", lineHeight: 1.45, marginBottom: isActive ? "10px" : 0 }}>{step.text}</div>
+            {isActive && (
+              <div style={{ display: "flex", gap: "6px" }}>
+                {activeStep > 0 && <button type="button" onClick={() => setActiveStep(activeStep - 1)} style={{ border: "1px solid rgba(255,255,255,.16)", background: "rgba(255,255,255,.07)", color: "#ddd", borderRadius: "5px", padding: "6px 8px", fontSize: "11px", cursor: "pointer" }}>Indietro</button>}
+                {activeStep < steps.length - 1 ? (
+                  <button type="button" onClick={() => setActiveStep(activeStep + 1)} style={{ border: "none", background: step.color, color: "#08080d", borderRadius: "5px", padding: "6px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>Avanti</button>
+                ) : (
+                  <button type="button" onClick={finishTour} style={{ border: "none", background: step.color, color: "#08080d", borderRadius: "5px", padding: "6px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>Ho capito</button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      <div style={{ position: "absolute", right: 22, bottom: 22, width: 178, background: "rgba(16,16,24,.94)", border: "1px solid rgba(255,255,255,.12)", borderRadius: "8px", padding: "12px", pointerEvents: "auto", fontFamily: "sans-serif", boxShadow: "0 16px 42px rgba(0,0,0,.35)" }}>
+        <div style={{ color: "#fff", fontSize: "12px", fontWeight: "bold", marginBottom: "4px" }}>Consiglio</div>
+        <div style={{ color: "#9da4b3", fontSize: "11px", lineHeight: 1.45, marginBottom: "10px" }}>Puoi riaprire questa guida dal pulsante Onboarding in alto.</div>
+        <button type="button" onClick={finishTour} style={{ width: "100%", border: "1px solid rgba(255,255,255,.14)", background: "rgba(255,255,255,.06)", color: "#ddd", borderRadius: "6px", padding: "7px 8px", fontSize: "11px", cursor: "pointer" }}>Salta tour</button>
+      </div>
     </div>
   );
 }
@@ -1239,6 +1375,10 @@ export default function App() {
   const [onboardingComplete, setOnboardingComplete] = useState(() => (
     window.localStorage.getItem(ONBOARDING_STORAGE) === "true"
   ));
+  const [showAppTour, setShowAppTour] = useState(() => (
+    window.localStorage.getItem(ONBOARDING_STORAGE) === "true"
+    && window.localStorage.getItem(APP_TOUR_STORAGE) !== "true"
+  ));
   const [file, setFile]           = useState(null);
   const [rawText, setRawText]     = useState("");
   const [elements, setElements]   = useState(null);
@@ -1264,11 +1404,11 @@ export default function App() {
   const completeOnboarding = () => {
     window.localStorage.setItem(ONBOARDING_STORAGE, "true");
     setOnboardingComplete(true);
+    setShowAppTour(true);
   };
 
   const openOnboarding = () => {
-    window.localStorage.removeItem(ONBOARDING_STORAGE);
-    setOnboardingComplete(false);
+    setShowAppTour(true);
   };
 
   useEffect(() => {
@@ -1823,6 +1963,8 @@ ${elements.map((el) => {
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 3px; }
       `}</style>
+
+      {showAppTour && <AppGuidedOnboarding onClose={() => setShowAppTour(false)} />}
     </div>
   );
 }
