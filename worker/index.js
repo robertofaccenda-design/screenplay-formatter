@@ -1,6 +1,7 @@
-// Cloudflare Worker for /api/format when deploying to workers.dev with static assets.
+// Cloudflare Worker for API routes when deploying to workers.dev with static assets.
+import { jsonrepair } from "jsonrepair";
 
-const SYSTEM_PROMPT = `Sei un esperto di sceneggiatura cinematografica professionale italiana e internazionale. Il tuo compito è analizzare un testo grezzo non formattato e restituire ESCLUSIVAMENTE un array JSON valido con gli elementi della sceneggiatura classificati e corretti.
+const FORMAT_SYSTEM_PROMPT = `Sei un esperto di sceneggiatura cinematografica professionale italiana e internazionale. Il tuo compito è analizzare un testo grezzo non formattato e restituire ESCLUSIVAMENTE un array JSON valido con gli elementi della sceneggiatura classificati e corretti.
 
 REGOLE DI CLASSIFICAZIONE:
 - "scene_heading": intestazioni di scena. Iniziano con INT., EST., INT./EST. o equivalenti. Mettile SEMPRE in MAIUSCOLO. Formato: INT./EST. LUOGO - GIORNO/NOTTE/ALBA/TRAMONTO
@@ -21,6 +22,85 @@ REGOLE DI CORREZIONE:
 - Non inventare contenuto narrativo: solo riclassifica e correggi quello esistente
 
 OUTPUT: Restituisci SOLO l'array JSON, senza markdown, senza backtick, senza spiegazioni.`;
+
+const ANALYZE_SYSTEM_PROMPT = `Sei un dramaturg e docente di sceneggiatura cinematografica con 30 anni di esperienza nell'insegnamento e nella produzione. Il tuo compito è analizzare una sceneggiatura in formato JSON (array di elementi tipizzati) e restituire ESCLUSIVAMENTE un oggetto JSON valido con l'analisi drammaturgica completa.
+
+STRUTTURA DELL'OUTPUT — restituisci SEMPRE tutti questi campi:
+
+{
+  "struttura": {
+    "totale_scene": <numero intero>,
+    "atti": [
+      {
+        "atto": 1,
+        "scene_da": <numero prima scena>,
+        "scene_a": <numero ultima scena>,
+        "percentuale": "<es. 25%>",
+        "funzione_narrativa": "<descrizione della funzione drammaturgica dell'atto>",
+        "valutazione": "efficace" | "debole" | "assente",
+        "note_docente": "<spiegazione didattica del perché l'atto funziona o no>"
+      },
+      ... (sempre 3 atti, anche se la struttura è sbilanciata)
+    ],
+    "momenti_chiave": [
+      {
+        "tipo": "inciting_incident" | "primo_punto_di_svolta" | "midpoint" | "secondo_punto_di_svolta" | "climax",
+        "scena_numero": <numero scena o null se assente>,
+        "descrizione": "<cosa succede in questo momento>",
+        "valutazione": "efficace" | "debole" | "assente",
+        "nota_docente": "<spiegazione didattica: perché questo momento è importante e se funziona>"
+      }
+    ]
+  },
+  "personaggi": [
+    {
+      "nome": "<NOME IN MAIUSCOLO>",
+      "battute": <numero>,
+      "arco": "crescita" | "regressione" | "statico" | "trasformazione_ambigua" | "assente",
+      "analisi_arco": "<descrizione dell'arco del personaggio nel testo>",
+      "tipi_conflitto": ["interno", "interpersonale", "sociale", "con_ambiente"],
+      "presenza_scene": <numero di scene in cui appare>,
+      "nota_docente": "<analisi didattica: l'arco funziona? è coerente? cosa manca?>"
+    }
+  ],
+  "analisi_scene": [
+    {
+      "numero": <progressivo da 1>,
+      "titolo": "<intestazione della scena>",
+      "conflitto": "alto" | "medio" | "basso" | "assente",
+      "funzione": "esposizione" | "sviluppo" | "svolta" | "climax" | "risoluzione" | "transizione",
+      "problemi": [],
+      "nota": "<breve commento sulla scena, max 2 righe>"
+    }
+  ],
+  "segnalazioni": [
+    {
+      "tipo": "dialogo_espositivo" | "scena_ridondante" | "squilibrio_showing_telling" | "conflitto_assente" | "arco_incompleto" | "ritmo_irregolare" | "struttura_squilibrata",
+      "gravita": "alta" | "media" | "bassa",
+      "scena_numero": <numero scena o null se globale>,
+      "elemento": "<citazione o riferimento al testo problematico, max 80 caratteri>",
+      "spiegazione": "<perché è un problema drammaturgico, in termini didattici>",
+      "suggerimento": "<come si potrebbe migliorare, con riferimento a tecniche o esempi>"
+    }
+  ],
+  "valutazione_globale": {
+    "punteggio_struttura": <da 1 a 10>,
+    "punteggio_personaggi": <da 1 a 10>,
+    "punteggio_dialoghi": <da 1 a 10>,
+    "punteggio_ritmo": <da 1 a 10>,
+    "punti_di_forza": ["<punto 1>", "<punto 2>"],
+    "aree_di_miglioramento": ["<area 1>", "<area 2>"],
+    "commento_docente": "<paragrafo di commento globale scritto come un docente di sceneggiatura>"
+  }
+}
+
+REGOLE FONDAMENTALI:
+- Conta le scene usando solo gli elementi di tipo "scene_heading"
+- Analizza i personaggi usando gli elementi "character" e "dialogue"
+- Identifica i momenti chiave dal contenuto narrativo, non solo dalla posizione
+- Le segnalazioni devono essere specifiche, utili e didatticamente motivate
+- Se la sceneggiatura è molto breve (meno di 5 scene), adatta l'analisi al contesto ma sii ugualmente preciso
+- Restituisci SOLO il JSON valido, senza markdown, backtick o testo aggiuntivo`;
 
 const MAX_INPUT_CHARS = 120000;
 const MAX_OUTPUT_ELEMENTS = 5000;
@@ -166,7 +246,7 @@ const handleFormat = async (request, env) => {
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 8000,
-        system: SYSTEM_PROMPT,
+        system: FORMAT_SYSTEM_PROMPT,
         messages: [
           {
             role: "user",
@@ -204,12 +284,83 @@ const handleFormat = async (request, env) => {
   }
 };
 
+const handleAnalyze = async (request, env) => {
+  if (request.method === "OPTIONS") {
+    return new Response("", { status: 200, headers: jsonHeaders });
+  }
+
+  if (request.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed" }, 405);
+  }
+
+  try {
+    const rawBody = await request.text();
+    const parsedBody = safeJsonParse(rawBody || "{}");
+    const elements = parsedBody?.elements;
+
+    if (!Array.isArray(elements) || elements.length < 3) {
+      return jsonResponse({ error: "Sceneggiatura non valida o troppo breve per l'analisi." }, 400);
+    }
+
+    const apiKey = env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return jsonResponse({
+        error: "API key non configurata. Imposta ANTHROPIC_API_KEY nei secrets del Worker Cloudflare.",
+      }, 502);
+    }
+
+    const sceneggiatura = elements
+      .filter((element) => element?.type !== "blank")
+      .map((element) => `[${String(element?.type || "action").toUpperCase()}] ${String(element?.content || "").slice(0, 200)}`)
+      .join("\n");
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 6000,
+        system: ANALYZE_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: "user",
+            content: `Analizza dramaturgicamente questa sceneggiatura e restituisci il JSON di analisi:\n\n${sceneggiatura}`,
+          },
+        ],
+      }),
+    });
+
+    const rawResponseBody = await response.text();
+    const data = safeJsonParse(rawResponseBody);
+
+    if (!response.ok) {
+      return jsonResponse({ error: extractAnthropicError(data, response.status) }, 500);
+    }
+
+    const raw = data?.content?.find((block) => block.type === "text")?.text || "{}";
+    const clean = raw.replace(/```json|```/g, "").trim();
+    const analysis = JSON.parse(jsonrepair(clean));
+
+    return jsonResponse({ analysis });
+  } catch (err) {
+    return jsonResponse({ error: `Errore interno: ${err.message}` }, 500);
+  }
+};
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/format") {
       return handleFormat(request, env);
+    }
+
+    if (url.pathname === "/api/analyze") {
+      return handleAnalyze(request, env);
     }
 
     if (env.ASSETS) {
