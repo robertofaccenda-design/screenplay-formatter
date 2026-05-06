@@ -371,7 +371,7 @@ const getAnthropicApiKey = (request, env) => {
 };
 
 const missingApiKeyResponse = () => jsonResponse({
-  error: "API key Anthropic non configurata. Inserisci la tua chiave personale nell'app oppure imposta ANTHROPIC_API_KEY nei secrets del Worker Cloudflare.",
+  error: "Per usare le funzioni AI serve una chiave Anthropic. Inserisci la tua chiave personale nel campo dedicato e riprova. Se stai gestendo tu l'app, puoi anche configurare una chiave predefinita sul Worker.",
 }, 502);
 
 const countMatches = (text, pattern) => (text.match(pattern) || []).length;
