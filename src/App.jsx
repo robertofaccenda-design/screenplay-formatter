@@ -7,6 +7,7 @@ const API_CHARACTER_SHEETS = "/api/character-sheets";
 const API_BREAKDOWN        = "/api/breakdown";
 const API_LOCATION_SHEETS  = "/api/location-sheets";
 const ANTHROPIC_KEY_STORAGE = "screenplayFormatter.anthropicApiKey";
+const ONBOARDING_STORAGE = "screenplayFormatter.onboardingComplete";
 
 // ─── Colori per tipi elemento ───────────────────────────────────────────────
 const typeLabels = {
@@ -67,6 +68,161 @@ function ScreenplayPreview({ elements }) {
         if (el.type === "dialogue") return <div key={i} style={{ marginLeft: "100px", marginRight: "100px", marginBottom: "4px" }}>{el.content}</div>;
         return <div key={i}>{el.content}</div>;
       })}
+    </div>
+  );
+}
+
+function OnboardingLanding({ onStart }) {
+  const [isNarrow, setIsNarrow] = useState(() => window.innerWidth <= 900);
+
+  useEffect(() => {
+    const handleResize = () => setIsNarrow(window.innerWidth <= 900);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const featureRows = [
+    ["Formattazione", "Trasforma testo grezzo in una struttura da sceneggiatura leggibile e ordinata."],
+    ["Analisi", "Legge struttura, personaggi, scene, segnalazioni e valutazione didattica."],
+    ["Produzione", "Genera schede personaggio, location e breakdown per reparti."],
+    ["BYOK", "Ogni utente puo usare la propria chiave Anthropic, senza inserirla nel codice."],
+  ];
+
+  const flowSteps = [
+    ["1", "Carica o incolla", "Importa un file TXT, DOCX o incolla direttamente il testo della scena."],
+    ["2", "Inserisci la chiave", "Aggiungi la tua API key Anthropic personale o usa quella del Worker, se configurata."],
+    ["3", "Genera gli output", "Formatta, analizza, crea schede e scarica il risultato in Fountain o HTML."],
+  ];
+
+  const s = {
+    page: { minHeight: "100vh", background: "#0b0b0f", color: "#f4efe2", fontFamily: "Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif", overflowX: "hidden" },
+    nav: { minHeight: "72px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", padding: isNarrow ? "14px 18px" : "0 40px", borderBottom: "1px solid rgba(255,255,255,.08)", boxSizing: "border-box" },
+    brand: { display: "flex", alignItems: "center", gap: "12px", fontWeight: 700, fontSize: "15px" },
+    mark: { width: "34px", height: "34px", borderRadius: "7px", background: "#c8a96e", color: "#111", display: "grid", placeItems: "center", fontFamily: "Georgia,serif", fontWeight: 700 },
+    navBtn: { border: "1px solid rgba(255,255,255,.18)", background: "rgba(255,255,255,.06)", color: "#f4efe2", borderRadius: "7px", padding: "9px 14px", fontWeight: 700, cursor: "pointer", fontSize: "13px" },
+    hero: { minHeight: isNarrow ? "auto" : "calc(86vh - 72px)", position: "relative", display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "minmax(280px, 0.9fr) minmax(360px, 1.1fr)", gap: isNarrow ? "28px" : "42px", alignItems: "center", padding: isNarrow ? "36px 18px 44px" : "44px 40px 58px", boxSizing: "border-box", background: "#111118" },
+    copy: { position: "relative", zIndex: 2, maxWidth: "640px" },
+    eyebrow: { fontSize: "12px", textTransform: "uppercase", letterSpacing: "1.4px", color: "#80CBC4", fontWeight: 800, marginBottom: "14px" },
+    title: { fontFamily: "Georgia,serif", fontSize: "clamp(40px, 6vw, 82px)", lineHeight: 0.95, margin: "0 0 20px", color: "#fff7e8", letterSpacing: 0 },
+    lead: { color: "#c8ccd7", fontSize: "clamp(16px, 2vw, 20px)", lineHeight: 1.55, maxWidth: "560px", margin: "0 0 28px" },
+    ctaRow: { display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" },
+    cta: { border: "none", background: "#c8a96e", color: "#121217", borderRadius: "7px", padding: "13px 18px", fontWeight: 800, cursor: "pointer", fontSize: "14px" },
+    secondary: { color: "#9ea5b5", fontSize: "13px", lineHeight: 1.5 },
+    mockWrap: { position: "relative", zIndex: 1, minHeight: isNarrow ? "360px" : "540px", display: "flex", alignItems: "center", justifyContent: "center" },
+    mock: { width: "min(720px, 100%)", minHeight: isNarrow ? "340px" : "500px", background: "#171820", border: "1px solid rgba(255,255,255,.12)", borderRadius: "8px", boxShadow: "0 30px 90px rgba(0,0,0,.45)", overflow: "hidden" },
+    mockTop: { height: "42px", borderBottom: "1px solid rgba(255,255,255,.08)", display: "flex", alignItems: "center", gap: "7px", padding: "0 14px", background: "#20222b" },
+    dot: { width: "9px", height: "9px", borderRadius: "50%" },
+    mockBody: { display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "210px 1fr", minHeight: isNarrow ? "298px" : "458px" },
+    mockSide: { borderRight: isNarrow ? "none" : "1px solid rgba(255,255,255,.08)", borderBottom: isNarrow ? "1px solid rgba(255,255,255,.08)" : "none", padding: isNarrow ? "12px" : "18px", display: "flex", flexDirection: isNarrow ? "row" : "column", gap: isNarrow ? "8px" : "13px", background: "#12131a", overflowX: isNarrow ? "auto" : "visible" },
+    mockPanel: { border: "1px solid rgba(255,255,255,.1)", borderRadius: "7px", padding: "12px", background: "rgba(255,255,255,.035)" },
+    mockMain: { padding: isNarrow ? "18px" : "22px", background: "#f7f5ef", color: "#1d1d1f", fontFamily: "'Courier New', monospace", fontSize: isNarrow ? "11px" : "12px", lineHeight: 1.7 },
+    band: { display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "repeat(4, minmax(0, 1fr))", gap: "1px", background: "rgba(255,255,255,.08)" },
+    feature: { background: "#101117", padding: "24px 22px", minHeight: "116px", boxSizing: "border-box" },
+    featureTitle: { color: "#f4efe2", fontWeight: 800, fontSize: "14px", marginBottom: "8px" },
+    featureText: { color: "#949cac", fontSize: "13px", lineHeight: 1.55 },
+    section: { padding: isNarrow ? "42px 18px 54px" : "54px 40px 68px", background: "#f3f0e8", color: "#171820" },
+    sectionInner: { maxWidth: "1180px", margin: "0 auto" },
+    sectionTitle: { fontFamily: "Georgia,serif", fontSize: "34px", lineHeight: 1.1, margin: "0 0 24px", letterSpacing: 0 },
+    steps: { display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "repeat(3, minmax(0, 1fr))", gap: "14px" },
+    step: { borderTop: "3px solid #c8a96e", background: "#fff", borderRadius: "7px", padding: "20px", boxShadow: "0 8px 24px rgba(20,20,20,.06)" },
+    stepNum: { color: "#0277BD", fontSize: "13px", fontWeight: 900, marginBottom: "16px" },
+    stepTitle: { fontSize: "18px", fontWeight: 800, marginBottom: "8px" },
+    stepText: { color: "#5d6270", fontSize: "14px", lineHeight: 1.55 },
+  };
+
+  return (
+    <div style={s.page}>
+      <div style={s.nav}>
+        <div style={s.brand}>
+          <div style={s.mark}>S</div>
+          <span>Screenplay Formatter AI</span>
+        </div>
+        <button type="button" style={s.navBtn} onClick={onStart}>Apri app</button>
+      </div>
+
+      <section style={s.hero}>
+        <div style={s.copy}>
+          <div style={s.eyebrow}>Onboarding per sceneggiature AI</div>
+          <h1 style={s.title}>Screenplay Formatter AI</h1>
+          <p style={s.lead}>
+            Un ambiente di lavoro per trasformare bozze, scene e testi grezzi in sceneggiature formattate,
+            con analisi drammaturgica, schede operative e gestione BYOK per le chiavi Anthropic personali.
+          </p>
+          <div style={s.ctaRow}>
+            <button type="button" style={s.cta} onClick={onStart}>Inizia a formattare</button>
+            <div style={s.secondary}>Nessuna registrazione nell'app. La chiave personale resta nel browser se scegli di ricordarla.</div>
+          </div>
+        </div>
+
+        <div style={s.mockWrap} aria-hidden="true">
+          <div style={s.mock}>
+            <div style={s.mockTop}>
+              <span style={{ ...s.dot, background: "#FF8A65" }} />
+              <span style={{ ...s.dot, background: "#FFD54F" }} />
+              <span style={{ ...s.dot, background: "#80CBC4" }} />
+            </div>
+            <div style={s.mockBody}>
+              <div style={s.mockSide}>
+                <div style={s.mockPanel}>
+                  <div style={{ color: "#c8a96e", fontSize: "11px", fontWeight: 800, marginBottom: "8px" }}>API Anthropic personale</div>
+                  <div style={{ height: "28px", borderRadius: "5px", background: "#0c0d12", border: "1px solid rgba(255,255,255,.12)" }} />
+                </div>
+                <div style={s.mockPanel}>
+                  <div style={{ height: "64px", borderRadius: "5px", background: "rgba(255,255,255,.05)" }} />
+                </div>
+                {["Formatta Sceneggiatura", "Analisi Drammaturgica", "Schede Personaggio", "Breakdown Reparti"].map((label) => (
+                  <div key={label} style={{ borderRadius: "6px", padding: "10px 12px", background: label === "Formatta Sceneggiatura" ? "#c8a96e" : "rgba(255,255,255,.07)", color: label === "Formatta Sceneggiatura" ? "#111" : "#d6d9e2", fontSize: "11px", fontWeight: 800 }}>
+                    {label}
+                  </div>
+                ))}
+              </div>
+              <div style={s.mockMain}>
+                <div style={{ textAlign: "center", fontWeight: 700, marginBottom: "34px" }}>LA NOTTE DEL PONTE</div>
+                <div style={{ fontWeight: 700, textDecoration: "underline", marginBottom: "8px" }}>EST. PONTE SUL FIUME - NOTTE</div>
+                <div>La pioggia batte sull'asfalto. Le luci della citta tremano nell'acqua nera.</div>
+                <div style={{ marginLeft: "190px", marginTop: "22px", fontWeight: 700 }}>MARTA</div>
+                <div style={{ marginLeft: "96px", marginRight: "90px" }}>Se attraversiamo adesso, non torniamo piu indietro.</div>
+                <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", fontFamily: "Inter, system-ui, sans-serif", fontSize: "11px" }}>
+                  {["3 atti", "5 scene", "2 location"].map((label) => (
+                    <div key={label} style={{ background: "#e8e1d1", borderRadius: "6px", padding: "9px", textAlign: "center", fontWeight: 800 }}>{label}</div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div style={s.band}>
+        {featureRows.map(([title, text]) => (
+          <div key={title} style={s.feature}>
+            <div style={s.featureTitle}>{title}</div>
+            <div style={s.featureText}>{text}</div>
+          </div>
+        ))}
+      </div>
+
+      <section style={s.section}>
+        <div style={s.sectionInner}>
+          <h2 style={s.sectionTitle}>Tre passaggi per arrivare agli output.</h2>
+          <div style={s.steps}>
+            {flowSteps.map(([num, title, text]) => (
+              <div key={num} style={s.step}>
+                <div style={s.stepNum}>STEP {num}</div>
+                <div style={s.stepTitle}>{title}</div>
+                <div style={s.stepText}>{text}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <style>{`
+        @media (max-width: 900px) {
+          body { margin: 0; }
+          button { min-height: 42px; }
+        }
+      `}</style>
     </div>
   );
 }
@@ -1080,6 +1236,9 @@ function BreakdownPanel({ data }) {
 
 // ─── App principale ───────────────────────────────────────────────────────────
 export default function App() {
+  const [onboardingComplete, setOnboardingComplete] = useState(() => (
+    window.localStorage.getItem(ONBOARDING_STORAGE) === "true"
+  ));
   const [file, setFile]           = useState(null);
   const [rawText, setRawText]     = useState("");
   const [elements, setElements]   = useState(null);
@@ -1101,6 +1260,16 @@ export default function App() {
   const [rememberApiKey, setRememberApiKey] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const fileInputRef = useRef();
+
+  const completeOnboarding = () => {
+    window.localStorage.setItem(ONBOARDING_STORAGE, "true");
+    setOnboardingComplete(true);
+  };
+
+  const openOnboarding = () => {
+    window.localStorage.removeItem(ONBOARDING_STORAGE);
+    setOnboardingComplete(false);
+  };
 
   useEffect(() => {
     const savedKey = window.localStorage.getItem(ANTHROPIC_KEY_STORAGE) || "";
@@ -1356,6 +1525,10 @@ ${elements.map((el) => {
     </button>
   );
 
+  if (!onboardingComplete) {
+    return <OnboardingLanding onStart={completeOnboarding} />;
+  }
+
   return (
     <div style={s.app}>
       {/* HEADER */}
@@ -1365,6 +1538,9 @@ ${elements.map((el) => {
           <div style={{ fontSize: "20px", fontWeight: "bold", letterSpacing: ".5px", color: "#f0ead8" }}>Screenplay Formatter AI</div>
           <div style={{ fontSize: "12px", color: "#888", marginTop: "2px", fontFamily: "sans-serif", letterSpacing: "1px", textTransform: "uppercase" }}>Formattazione · Analisi drammaturgica · Standard cinematografico</div>
         </div>
+        <button type="button" onClick={openOnboarding} style={{ marginLeft: "auto", background: "rgba(255,255,255,.06)", color: "#ccc", border: "1px solid rgba(255,255,255,.12)", borderRadius: "7px", padding: "8px 12px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", fontFamily: "sans-serif" }}>
+          Onboarding
+        </button>
       </div>
 
       <div style={s.main}>
