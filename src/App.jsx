@@ -55,15 +55,110 @@ function toFountain(elements) {
   }).join("\n").trim();
 }
 
+const escapeHtml = (value) => String(value)
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;")
+  .replace(/'/g, "&#039;");
+
+const estimateElementLines = (element) => {
+  const content = String(element?.content || "");
+  const lineWidth = element?.type === "dialogue" || element?.type === "parenthetical" ? 34 : 58;
+  const wrappedLines = content.split(/\n+/).reduce((sum, line) => (
+    sum + Math.max(1, Math.ceil(line.trim().length / lineWidth))
+  ), 0);
+
+  if (element?.type === "scene_heading") return wrappedLines + 1;
+  if (element?.type === "character") return 1;
+  if (element?.type === "blank") return 1;
+  return wrappedLines;
+};
+
+const formatPageEighths = (eighths) => {
+  const pages = Math.floor(eighths / 8);
+  const remainder = eighths % 8;
+  if (pages === 0) return `${remainder}/8 pag.`;
+  if (remainder === 0) return pages === 1 ? "1 pag." : `${pages} pag.`;
+  return `${pages} ${remainder}/8 pag.`;
+};
+
+function getScenePageEighths(elements) {
+  const sceneData = new Map();
+  let currentScene = null;
+  let sceneNumber = 0;
+
+  const closeScene = () => {
+    if (!currentScene) return;
+    const eighths = Math.max(1, Math.ceil((currentScene.lines / 55) * 8));
+    sceneData.set(currentScene.headingIndex, {
+      sceneNumber: currentScene.sceneNumber,
+      eighths,
+      label: `${formatPageEighths(eighths)}`,
+    });
+  };
+
+  elements.forEach((element, index) => {
+    if (element.type === "scene_heading") {
+      closeScene();
+      sceneNumber += 1;
+      currentScene = {
+        headingIndex: index,
+        sceneNumber,
+        lines: estimateElementLines(element),
+      };
+      return;
+    }
+
+    if (currentScene) {
+      currentScene.lines += estimateElementLines(element);
+    }
+  });
+
+  closeScene();
+  return sceneData;
+}
+
+function buildScreenplayHtml(elements) {
+  const scenePageEighths = getScenePageEighths(elements);
+
+  return elements.map((el, index) => {
+    const content = escapeHtml(el.content);
+    if (el.type === "blank") return `<div class="blank"></div>`;
+    if (el.type === "title") return `<div class="title">${content}</div>`;
+    if (el.type === "transition") return `<div class="transition">${content}</div>`;
+    if (el.type === "scene_heading") {
+      const sceneInfo = scenePageEighths.get(index);
+      const badge = sceneInfo ? `<span class="scene-eighth">Scena ${sceneInfo.sceneNumber} · ${sceneInfo.label}</span>` : "";
+      return `<div class="scene-heading"><span>${content}</span>${badge}</div>`;
+    }
+    if (el.type === "action") return `<div class="action">${content}</div>`;
+    if (el.type === "character") return `<div class="character">${content}</div>`;
+    if (el.type === "parenthetical") return `<div class="parenthetical">${content}</div>`;
+    if (el.type === "dialogue") return `<div class="dialogue">${content}</div>`;
+    return `<div>${content}</div>`;
+  }).join("\n");
+}
+
 // ─── Preview cinematografica ──────────────────────────────────────────────────
 function ScreenplayPreview({ elements }) {
+  const scenePageEighths = getScenePageEighths(elements);
+
   return (
     <div style={{ fontFamily: "'Courier Prime','Courier New',Courier,monospace", fontSize: "13px", lineHeight: "1.7", background: "#fff", color: "#111", padding: "60px 80px", maxWidth: "680px", margin: "0 auto", minHeight: "400px" }}>
       {elements.map((el, i) => {
         if (el.type === "blank") return <div key={i} style={{ height: "1em" }} />;
         if (el.type === "title") return <div key={i} style={{ textAlign: "center", fontWeight: "bold", fontSize: "15px", marginBottom: "32px" }}>{el.content}</div>;
         if (el.type === "transition") return <div key={i} style={{ textAlign: "right", textTransform: "uppercase", marginTop: "12px", marginBottom: "4px" }}>{el.content}</div>;
-        if (el.type === "scene_heading") return <div key={i} style={{ fontWeight: "bold", textTransform: "uppercase", marginTop: "20px", marginBottom: "4px", textDecoration: "underline" }}>{el.content}</div>;
+        if (el.type === "scene_heading") {
+          const sceneInfo = scenePageEighths.get(i);
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "16px", fontWeight: "bold", textTransform: "uppercase", marginTop: "20px", marginBottom: "4px", textDecoration: "underline" }}>
+              <span>{el.content}</span>
+              {sceneInfo && <span style={{ fontFamily: "Arial,sans-serif", fontSize: "10px", color: "#666", textDecoration: "none", whiteSpace: "nowrap", textTransform: "none" }}>Scena {sceneInfo.sceneNumber} · {sceneInfo.label}</span>}
+            </div>
+          );
+        }
         if (el.type === "action") return <div key={i} style={{ marginTop: "8px", marginBottom: "8px" }}>{el.content}</div>;
         if (el.type === "character") return <div key={i} style={{ marginLeft: "200px", marginTop: "14px", textTransform: "uppercase", fontWeight: "bold" }}>{el.content}</div>;
         if (el.type === "parenthetical") return <div key={i} style={{ marginLeft: "140px", marginRight: "160px", fontStyle: "italic" }}>{el.content}</div>;
@@ -1642,34 +1737,58 @@ export default function App() {
 <html lang="it"><head><meta charset="UTF-8"><title>Sceneggiatura</title>
 <style>
   body{font-family:'Courier New',monospace;font-size:12pt;margin:0;padding:0;background:white}
+  @page{size:A4;margin:25mm 30mm 25mm 35mm}
   .page{width:210mm;min-height:297mm;margin:0 auto;padding:25mm 30mm 25mm 35mm;box-sizing:border-box}
   .title{text-align:center;font-weight:bold;font-size:14pt;margin-bottom:30px}
   .transition{text-align:right;text-transform:uppercase;margin:12px 0 4px}
-  .scene-heading{font-weight:bold;text-transform:uppercase;text-decoration:underline;margin:20px 0 4px}
+  .scene-heading{display:flex;align-items:baseline;justify-content:space-between;gap:16px;font-weight:bold;text-transform:uppercase;text-decoration:underline;margin:20px 0 4px;break-inside:avoid}
+  .scene-eighth{font-family:Arial,sans-serif;font-size:8pt;color:#666;text-transform:none;text-decoration:none;white-space:nowrap;font-weight:normal}
   .action{margin:8px 0}
   .character{margin-left:200px;text-transform:uppercase;font-weight:bold;margin-top:14px}
   .parenthetical{margin-left:140px;margin-right:160px;font-style:italic}
   .dialogue{margin-left:100px;margin-right:100px;margin-bottom:4px}
   .blank{height:1em}
-  @media print{body{margin:0}.page{width:100%}}
+  @media print{body{margin:0}.page{width:100%;padding:0}}
 </style></head><body><div class="page">
-${elements.map((el) => {
-  if (el.type === "blank") return `<div class="blank"></div>`;
-  if (el.type === "title") return `<div class="title">${el.content}</div>`;
-  if (el.type === "transition") return `<div class="transition">${el.content}</div>`;
-  if (el.type === "scene_heading") return `<div class="scene-heading">${el.content}</div>`;
-  if (el.type === "action") return `<div class="action">${el.content}</div>`;
-  if (el.type === "character") return `<div class="character">${el.content}</div>`;
-  if (el.type === "parenthetical") return `<div class="parenthetical">${el.content}</div>`;
-  if (el.type === "dialogue") return `<div class="dialogue">${el.content}</div>`;
-  return `<div>${el.content}</div>`;
-}).join("\n")}
+${buildScreenplayHtml(elements)}
 </div></body></html>`;
     const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url;
     a.download = `${file ? file.name.replace(/\.[^.]+$/, "") : "sceneggiatura"}_sceneggiatura.html`;
     a.click(); URL.revokeObjectURL(url);
+  };
+
+  const downloadPdf = () => {
+    if (!elements) return;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      setError("Il browser ha bloccato l'apertura della finestra PDF. Abilita i popup per esportare in PDF.");
+      return;
+    }
+
+    const htmlContent = `<!DOCTYPE html>
+<html lang="it"><head><meta charset="UTF-8"><title>Sceneggiatura PDF</title>
+<style>
+  @page{size:A4;margin:25mm 30mm 25mm 35mm}
+  body{font-family:'Courier New',monospace;font-size:12pt;margin:0;background:white;color:#111}
+  .page{box-sizing:border-box}
+  .title{text-align:center;font-weight:bold;font-size:14pt;margin-bottom:30px}
+  .transition{text-align:right;text-transform:uppercase;margin:12px 0 4px}
+  .scene-heading{display:flex;align-items:baseline;justify-content:space-between;gap:16px;font-weight:bold;text-transform:uppercase;text-decoration:underline;margin:20px 0 4px;break-inside:avoid}
+  .scene-eighth{font-family:Arial,sans-serif;font-size:8pt;color:#666;text-transform:none;text-decoration:none;white-space:nowrap;font-weight:normal}
+  .action{margin:8px 0}
+  .character{margin-left:200px;text-transform:uppercase;font-weight:bold;margin-top:14px}
+  .parenthetical{margin-left:140px;margin-right:160px;font-style:italic}
+  .dialogue{margin-left:100px;margin-right:100px;margin-bottom:4px}
+  .blank{height:1em}
+</style></head><body><div class="page">
+${buildScreenplayHtml(elements)}
+</div><script>window.addEventListener("load",()=>{window.focus();window.print();});</script></body></html>`;
+
+    printWindow.document.open();
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
   };
 
   const busy            = loading || analyzing || loadingSheets || loadingBreakdown || loadingLocations;
@@ -1684,6 +1803,9 @@ ${elements.map((el) => {
     dialogue:  elements.filter((e) => e.type === "dialogue").length,
     action:    elements.filter((e) => e.type === "action").length,
   } : null;
+  const scenePageEighths = useMemo(() => (
+    elements ? getScenePageEighths(elements) : new Map()
+  ), [elements]);
 
   const segnalazioniCount = analysis?.segnalazioni?.length || 0;
   const segnCritiche = analysis?.segnalazioni?.filter(s => s.gravita === "alta").length || 0;
@@ -1872,9 +1994,10 @@ ${elements.map((el) => {
               <div style={{ display: "flex", gap: "8px" }}>
                 <button style={s.btnSec} onClick={downloadFountain}>.fountain</button>
                 <button style={s.btnSec} onClick={downloadHtml}>.html</button>
+                <button style={s.btnSec} onClick={downloadPdf}>.pdf</button>
               </div>
               <div style={{ fontSize: "10px", color: "#555", fontFamily: "sans-serif", marginTop: "6px" }}>
-                .fountain → Final Draft, Fade In · .html → stampa/PDF
+                .fountain → Final Draft, Fade In · .html → stampa · .pdf → salva da dialogo stampa
               </div>
             </div>
           )}
@@ -1958,12 +2081,17 @@ ${elements.map((el) => {
             {/* Tab: Struttura elementi */}
             {!busy && elements && activeTab === "struttura" && (
               <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
-                {elements.filter((e) => e.type !== "blank").map((el, i) => (
+                {elements.map((el, i) => el.type !== "blank" && (
                   <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "7px 0", borderBottom: "1px solid rgba(255,255,255,.04)" }}>
                     <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: "4px", fontSize: "10px", fontWeight: "bold", fontFamily: "sans-serif", background: `${typeColors[el.type]}22`, color: typeColors[el.type], border: `1px solid ${typeColors[el.type]}44`, whiteSpace: "nowrap", minWidth: "90px", textAlign: "center" }}>
                       {typeLabels[el.type] || el.type}
                     </span>
                     <span style={{ fontFamily: "monospace", fontSize: "13px", color: "#ccc", lineHeight: "1.5" }}>{el.content}</span>
+                    {el.type === "scene_heading" && scenePageEighths.get(i) && (
+                      <span style={{ marginLeft: "auto", padding: "2px 8px", borderRadius: "4px", fontSize: "10px", fontFamily: "sans-serif", background: "rgba(200,169,110,.12)", color: "#c8a96e", border: "1px solid rgba(200,169,110,.25)", whiteSpace: "nowrap" }}>
+                        Scena {scenePageEighths.get(i).sceneNumber} · {scenePageEighths.get(i).label}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
