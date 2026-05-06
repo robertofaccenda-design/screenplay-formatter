@@ -9,6 +9,7 @@ const API_LOCATION_SHEETS  = "/api/location-sheets";
 const ANTHROPIC_KEY_STORAGE = "screenplayFormatter.anthropicApiKey";
 const ONBOARDING_STORAGE = "screenplayFormatter.onboardingComplete";
 const APP_TOUR_STORAGE = "screenplayFormatter.appTourComplete";
+const ONBOARDING_FLOW_VERSION = "landing-before-tour-v1";
 
 // ─── Colori per tipi elemento ───────────────────────────────────────────────
 const typeLabels = {
@@ -1420,10 +1421,10 @@ function BreakdownPanel({ data }) {
 // ─── App principale ───────────────────────────────────────────────────────────
 export default function App() {
   const [onboardingComplete, setOnboardingComplete] = useState(() => (
-    window.localStorage.getItem(ONBOARDING_STORAGE) === "true"
+    window.localStorage.getItem(ONBOARDING_STORAGE) === ONBOARDING_FLOW_VERSION
   ));
   const [showAppTour, setShowAppTour] = useState(() => (
-    window.localStorage.getItem(ONBOARDING_STORAGE) === "true"
+    window.localStorage.getItem(ONBOARDING_STORAGE) === ONBOARDING_FLOW_VERSION
     && window.localStorage.getItem(APP_TOUR_STORAGE) !== "true"
   ));
   const [file, setFile]           = useState(null);
@@ -1461,13 +1462,17 @@ export default function App() {
   }), []);
 
   const completeOnboarding = () => {
-    window.localStorage.setItem(ONBOARDING_STORAGE, "true");
+    window.localStorage.setItem(ONBOARDING_STORAGE, ONBOARDING_FLOW_VERSION);
+    window.localStorage.removeItem(APP_TOUR_STORAGE);
     setOnboardingComplete(true);
     setShowAppTour(true);
   };
 
   const openOnboarding = () => {
-    setShowAppTour(true);
+    window.localStorage.removeItem(ONBOARDING_STORAGE);
+    window.localStorage.removeItem(APP_TOUR_STORAGE);
+    setShowAppTour(false);
+    setOnboardingComplete(false);
   };
 
   useEffect(() => {
