@@ -119,7 +119,7 @@ function getScenePageEighths(elements) {
   return sceneData;
 }
 
-function buildScreenplayHtml(elements) {
+function buildScreenplayHtml(elements, { scenePageBreaks = false } = {}) {
   const scenePageEighths = getScenePageEighths(elements);
 
   return elements.map((el, index) => {
@@ -130,7 +130,8 @@ function buildScreenplayHtml(elements) {
     if (el.type === "scene_heading") {
       const sceneInfo = scenePageEighths.get(index);
       const badge = sceneInfo ? `<span class="scene-eighth">Scena ${sceneInfo.sceneNumber} · ${sceneInfo.label}</span>` : "";
-      return `<div class="scene-heading"><span>${content}</span>${badge}</div>`;
+      const pageBreakClass = scenePageBreaks && sceneInfo?.sceneNumber > 1 ? " page-break-before" : "";
+      return `<div class="scene-heading${pageBreakClass}"><span>${content}</span>${badge}</div>`;
     }
     if (el.type === "action") return `<div class="action">${content}</div>`;
     if (el.type === "character") return `<div class="character">${content}</div>`;
@@ -1759,7 +1760,7 @@ ${buildScreenplayHtml(elements)}
     a.click(); URL.revokeObjectURL(url);
   };
 
-  const downloadPdf = () => {
+  const openPdfPrint = ({ scenePageBreaks = false } = {}) => {
     if (!elements) return;
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
@@ -1782,13 +1783,22 @@ ${buildScreenplayHtml(elements)}
   .parenthetical{margin-left:140px;margin-right:160px;font-style:italic}
   .dialogue{margin-left:100px;margin-right:100px;margin-bottom:4px}
   .blank{height:1em}
+  .page-break-before{break-before:page;page-break-before:always;margin-top:0}
 </style></head><body><div class="page">
-${buildScreenplayHtml(elements)}
+${buildScreenplayHtml(elements, { scenePageBreaks })}
 </div><script>window.addEventListener("load",()=>{window.focus();window.print();});</script></body></html>`;
 
     printWindow.document.open();
     printWindow.document.write(htmlContent);
     printWindow.document.close();
+  };
+
+  const downloadPdf = () => {
+    openPdfPrint();
+  };
+
+  const downloadPdfByScene = () => {
+    openPdfPrint({ scenePageBreaks: true });
   };
 
   const busy            = loading || analyzing || loadingSheets || loadingBreakdown || loadingLocations;
@@ -1995,9 +2005,10 @@ ${buildScreenplayHtml(elements)}
                 <button style={s.btnSec} onClick={downloadFountain}>.fountain</button>
                 <button style={s.btnSec} onClick={downloadHtml}>.html</button>
                 <button style={s.btnSec} onClick={downloadPdf}>.pdf</button>
+                <button style={s.btnSec} onClick={downloadPdfByScene}>pdf/page</button>
               </div>
               <div style={{ fontSize: "10px", color: "#555", fontFamily: "sans-serif", marginTop: "6px" }}>
-                .fountain → Final Draft, Fade In · .html → stampa · .pdf → salva da dialogo stampa
+                .fountain → Final Draft, Fade In · .html → stampa · .pdf continuo · pdf/page → una scena per pagina
               </div>
             </div>
           )}
