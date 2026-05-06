@@ -271,9 +271,9 @@ function AppGuidedOnboarding({ onClose }) {
       text: "Puoi anche lavorare senza file: incolla direttamente qui una scena o una bozza.",
       color: "#FACC15",
       top: 382,
-      left: 440,
-      line: { x1: 440, y1: 422, x2: 128, y2: 504 },
-      highlight: { left: 8, top: 428, width: 252, height: 142 },
+      left: 650,
+      line: { x1: 650, y1: 422, x2: 338, y2: 504 },
+      highlight: { left: 218, top: 428, width: 252, height: 142 },
     },
     {
       title: "Formatta e analizza",
