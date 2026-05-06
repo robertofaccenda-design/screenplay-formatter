@@ -312,13 +312,13 @@ function AppGuidedOnboarding({ onClose, targets }) {
             ? {
                 x1: cardLeft + cardWidth,
                 y1: cardTop + 44,
-                x2: rect.left + (rect.width / 2),
+                x2: rect.left - 2,
                 y2: rect.top + (rect.height / 2),
               }
             : {
                 x1: cardLeft,
                 y1: cardTop + 44,
-                x2: rect.right - 10,
+                x2: rect.right + 2,
                 y2: rect.top + (rect.height / 2),
               },
         };
