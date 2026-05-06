@@ -236,6 +236,94 @@ REGOLE:
 - Se non ci sono effetti speciali, veicoli o altri elementi opzionali, restituisci array vuoti
 - Restituisci SOLO il JSON valido, senza markdown, backtick o testo aggiuntivo.`;
 
+const LOCATION_SHEETS_SYSTEM_PROMPT = `Sei un location manager e scenografo cinematografico con 20 anni di esperienza, con una solida formazione nell'insegnamento della produzione audiovisiva. Analizza una sceneggiatura in formato JSON e genera schede location dettagliate, pronte per il location scouting e per uso didattico.
+
+Restituisci ESCLUSIVAMENTE un oggetto JSON valido con questa struttura:
+
+{
+  "locations": [
+    {
+      "nome": "<nome identificativo della location, chiaro e univoco>",
+      "identificativo": "<es. LOC-01>",
+      "tipo": "INT" | "EST" | "INT/EST",
+      "scene": [<lista numeri scena>],
+      "scene_count": <numero>,
+      "momenti_giornata": ["GIORNO", "NOTTE", "ALBA", "TRAMONTO"],
+      "personaggi_presenti": ["<NOME1>", "<NOME2>"],
+      "comparse_max_stimato": <numero>,
+      "descrizione_narrativa": "<come viene descritta o percepita la location nella storia>",
+      "atmosfera": "<aggettivi che ne descrivono il tono emotivo e visivo>",
+      "funzione_drammaturgica": "<perché questa location esiste nella storia>",
+      "caratteristiche_tecniche": {
+        "dimensioni_stimate": "piccola" | "media" | "grande" | "molto_grande",
+        "luce_naturale": true | false | "non_specificato",
+        "direzione_luce_preferibile": "<indicazione deducibile>",
+        "acustica_stimata": "buona" | "problematica" | "eco" | "non_specificato",
+        "accessibilità_attrezzatura": "facile" | "media" | "difficile" | "non_specificato",
+        "spazio_per_troupe": "sufficiente" | "limitato" | "molto_limitato" | "non_specificato"
+      },
+      "allestimento": {
+        "livello": "minimo" | "medio" | "importante" | "costruito_in_studio",
+        "elementi_scenografia_identificati": ["<elemento1>", "<elemento2>"],
+        "elementi_da_aggiungere": ["<elemento da portare in set>"],
+        "elementi_da_rimuovere": ["<elemento da eliminare se location reale>"],
+        "note_scenografo": "<indicazioni per il production designer>"
+      },
+      "scouting": {
+        "tipo_ricerca": "location_reale" | "studio" | "misto" | "da_valutare",
+        "caratteristiche_fondamentali": "<cosa deve avere assolutamente la location>",
+        "caratteristiche_desiderabili": "<elementi preferibili ma non essenziali>",
+        "problemi_potenziali": "<rumore, permessi, accessibilità, meteo, continuità luce>",
+        "permessi_necessari": true | false | "probabilmente",
+        "alternative_studio": "<come si potrebbe ricostruire in studio se necessario>",
+        "note_logistiche": "<parcheggio, carico/scarico, bagni, spazio regia/monitor>"
+      },
+      "piano_riprese": {
+        "giorni_stimati": <numero>,
+        "ore_stimate_totali": <numero>,
+        "scene_consigliate_nello_stesso_giorno": [<lista numeri scena>],
+        "note_ottimizzazione": "<perché raggruppare queste scene>"
+      },
+      "fotografia": {
+        "stile_suggerito": "<stile fotografico suggerito>",
+        "sfide_fotografiche": "<sfide visive e tecniche>",
+        "riferimenti_visivi": "<riferimenti a film o stili fotografici affini>"
+      },
+      "scheda_didattica": {
+        "concetto_chiave": "<concetto di produzione rilevante>",
+        "relazione_spazio_personaggio": "<come lo spazio riflette o contrasta i personaggi>",
+        "domande_per_studenti": ["<domanda 1>", "<domanda 2>"],
+        "nota_docente": "<commento critico per uso in aula>"
+      }
+    }
+  ],
+  "mappa_narrativa_locations": [
+    {
+      "location_a": "<nome>",
+      "location_b": "<nome>",
+      "relazione": "<contrasto, progressione, parallelismo, ritorno>",
+      "transizione_scene": "<quale scena o momento connette le due location>"
+    }
+  ],
+  "riepilogo_produzione": {
+    "totale_locations": <numero>,
+    "locations_interne": <numero>,
+    "locations_esterne": <numero>,
+    "giorni_totali_stimati": <numero>,
+    "location_più_complessa": "<nome>",
+    "location_più_ricorrente": "<nome>",
+    "budget_scenografia_indicativo": "minimo" | "contenuto" | "medio" | "significativo",
+    "note_generali": "<valutazione globale delle location>"
+  }
+}
+
+REGOLE:
+- Identifica ogni location univoca dal testo, anche se appare con variazioni
+- Assegna identificativi progressivi (LOC-01, LOC-02, ...)
+- L'atmosfera deve essere concreta e visiva, non vaga
+- Se una location non è descritta in dettaglio, deduci dalle scene che vi si svolgono
+- Restituisci SOLO il JSON valido, senza markdown, backtick o testo aggiuntivo.`;
+
 const MAX_INPUT_CHARS = 120000;
 const MAX_OUTPUT_ELEMENTS = 5000;
 const MAX_ELEMENT_CONTENT_CHARS = 10000;
@@ -636,6 +724,70 @@ const handleBreakdown = async (request, env) => {
   }
 };
 
+const handleLocationSheets = async (request, env) => {
+  if (request.method === "OPTIONS") {
+    return new Response("", { status: 200, headers: jsonHeaders });
+  }
+
+  if (request.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed" }, 405);
+  }
+
+  try {
+    const rawBody = await request.text();
+    const parsedBody = safeJsonParse(rawBody || "{}");
+    const elements = parsedBody?.elements;
+
+    if (!Array.isArray(elements) || elements.length < 3) {
+      return jsonResponse({ error: "Sceneggiatura non valida o troppo breve." }, 400);
+    }
+
+    const apiKey = env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return jsonResponse({
+        error: "API key non configurata. Imposta ANTHROPIC_API_KEY nei secrets del Worker Cloudflare.",
+      }, 502);
+    }
+
+    const sceneggiatura = serializeElementsWithScenes(elements);
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 6000,
+        system: LOCATION_SHEETS_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: "user",
+            content: `Genera le schede location complete per questa sceneggiatura:\n\n${sceneggiatura}`,
+          },
+        ],
+      }),
+    });
+
+    const rawResponseBody = await response.text();
+    const data = safeJsonParse(rawResponseBody);
+
+    if (!response.ok) {
+      return jsonResponse({ error: extractAnthropicError(data, response.status) }, 500);
+    }
+
+    const raw = data?.content?.find((block) => block.type === "text")?.text || "{}";
+    const clean = raw.replace(/```json|```/g, "").trim();
+    const locationSheets = JSON.parse(jsonrepair(clean));
+
+    return jsonResponse({ locationSheets });
+  } catch (err) {
+    return jsonResponse({ error: `Errore interno: ${err.message}` }, 500);
+  }
+};
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -654,6 +806,10 @@ export default {
 
     if (url.pathname === "/api/breakdown") {
       return handleBreakdown(request, env);
+    }
+
+    if (url.pathname === "/api/location-sheets") {
+      return handleLocationSheets(request, env);
     }
 
     if (env.ASSETS) {
