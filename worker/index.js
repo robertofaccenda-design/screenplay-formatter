@@ -102,6 +102,81 @@ REGOLE FONDAMENTALI:
 - Se la sceneggiatura è molto breve (meno di 5 scene), adatta l'analisi al contesto ma sii ugualmente preciso
 - Restituisci SOLO il JSON valido, senza markdown, backtick o testo aggiuntivo`;
 
+const CHARACTER_SHEETS_SYSTEM_PROMPT = `Sei un dramaturg e script analyst con esperienza sia nella produzione cinematografica professionale che nell'insegnamento accademico della scrittura creativa. Il tuo compito è generare schede personaggio dettagliate a partire da una sceneggiatura in formato JSON.
+
+Restituisci ESCLUSIVAMENTE un oggetto JSON valido con questa struttura:
+
+{
+  "personaggi": [
+    {
+      "nome": "<NOME IN MAIUSCOLO, esattamente come appare in sceneggiatura>",
+      "ruolo": "protagonista" | "antagonista" | "deuteragonista" | "personaggio_secondario" | "comparsa",
+      "genere_presunto": "M" | "F" | "non_specificato",
+      "presenza": {
+        "scene_totali": <numero di scene in cui appare>,
+        "prima_scena": <numero scena>,
+        "ultima_scena": <numero scena>,
+        "scene_numeri": [<lista numeri scene>],
+        "battute_totali": <numero>,
+        "percentuale_dialogo": "<es. 34%>"
+      },
+      "profilo_narrativo": {
+        "descrizione_in_una_riga": "<chi è questo personaggio in una frase>",
+        "motivazione_principale": "<cosa vuole ottenere nel corso della storia>",
+        "bisogno_profondo": "<cosa gli manca davvero, spesso inconscio>",
+        "paura_principale": "<cosa teme di più>",
+        "difetto_principale": "<il suo limite o vizio drammatico>",
+        "pregio_principale": "<la sua qualità più evidente>",
+        "arco_narrativo": "<descrizione del cambiamento — o della sua assenza — nel corso della storia>",
+        "citazione_rappresentativa": "<la battuta più significativa del personaggio, citata testualmente dalla sceneggiatura>"
+      },
+      "relazioni": [
+        {
+          "con": "<NOME PERSONAGGIO>",
+          "tipo": "amore" | "amicizia" | "rivalità" | "dipendenza" | "mentore" | "antagonismo" | "parentela" | "professionale" | "ambigua",
+          "descrizione": "<come si manifesta questa relazione nella storia, max 2 righe>"
+        }
+      ],
+      "conflitti": {
+        "interno": "<conflitto psicologico o morale dentro il personaggio, se presente>",
+        "interpersonale": "<conflitto principale con un altro personaggio>",
+        "sociale_o_ambientale": "<conflitto con il mondo esterno, la società, le circostanze>"
+      },
+      "scheda_produzione": {
+        "caratteristiche_fisiche_deducibili": "<età approssimativa, aspetto fisico, dettagli deducibili dal testo>",
+        "costumi_accessori": "<elementi di costume o accessori menzionati o deducibili>",
+        "note_casting": "<suggerimenti per il casting basati sul profilo del personaggio>",
+        "complessità_interpretativa": "alta" | "media" | "bassa",
+        "presenza_scena_difficile": true | false,
+        "note_regia": "<note tecniche utili al regista: posizionamento, dinamiche con altri personaggi, momenti chiave>"
+      },
+      "scheda_didattica": {
+        "funzione_drammaturgica": "<perché questo personaggio esiste nella storia — qual è la sua funzione narrativa>",
+        "archetipo": "<archetipo di riferimento: es. eroe, mentore, ombra, impostore, trickster, ecc.>",
+        "domande_per_l_autore": ["<domanda 1 per approfondire il personaggio>", "<domanda 2>", "<domanda 3>"],
+        "nota_docente": "<commento critico del docente: cosa funziona, cosa manca, come svilupparlo ulteriormente>"
+      }
+    }
+  ],
+  "mappa_relazioni": [
+    {
+      "da": "<PERSONAGGIO A>",
+      "a": "<PERSONAGGIO B>",
+      "tipo": "<tipo relazione>",
+      "intensità": "alta" | "media" | "bassa"
+    }
+  ],
+  "note_ensemble": "<commento globale sull'insieme dei personaggi: equilibrio, dinamiche di gruppo, eventuali squilibri o assenze>"
+}
+
+REGOLE:
+- Includi TUTTI i personaggi con almeno 2 battute. Escludi le comparse senza nome con meno di 2 battute.
+- Ordina i personaggi per numero di battute decrescente.
+- La "citazione_rappresentativa" deve essere una battuta reale presente nella sceneggiatura, non inventata.
+- Le "domande_per_l_autore" devono essere domande aperte e stimolanti, utili in un workshop di scrittura.
+- Se un'informazione non è deducibile dal testo, indica "non specificato" invece di inventare.
+- Restituisci SOLO il JSON valido, senza markdown, backtick o testo aggiuntivo.`;
+
 const MAX_INPUT_CHARS = 120000;
 const MAX_OUTPUT_ELEMENTS = 5000;
 const MAX_ELEMENT_CONTENT_CHARS = 10000;
@@ -351,6 +426,79 @@ const handleAnalyze = async (request, env) => {
   }
 };
 
+const handleCharacterSheets = async (request, env) => {
+  if (request.method === "OPTIONS") {
+    return new Response("", { status: 200, headers: jsonHeaders });
+  }
+
+  if (request.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed" }, 405);
+  }
+
+  try {
+    const rawBody = await request.text();
+    const parsedBody = safeJsonParse(rawBody || "{}");
+    const elements = parsedBody?.elements;
+
+    if (!Array.isArray(elements) || elements.length < 3) {
+      return jsonResponse({ error: "Sceneggiatura non valida o troppo breve." }, 400);
+    }
+
+    const apiKey = env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return jsonResponse({
+        error: "API key non configurata. Imposta ANTHROPIC_API_KEY nei secrets del Worker Cloudflare.",
+      }, 502);
+    }
+
+    let sceneCount = 0;
+    const sceneggiatura = elements
+      .filter((element) => element?.type !== "blank")
+      .map((element) => {
+        if (element?.type === "scene_heading") sceneCount += 1;
+        const type = String(element?.type || "action").toUpperCase();
+        const prefix = element?.type === "scene_heading" ? `[SCENA ${sceneCount}][${type}]` : `[${type}]`;
+        return `${prefix} ${String(element?.content || "").slice(0, 200)}`;
+      })
+      .join("\n");
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 6000,
+        system: CHARACTER_SHEETS_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: "user",
+            content: `Genera le schede personaggio complete per questa sceneggiatura:\n\n${sceneggiatura}`,
+          },
+        ],
+      }),
+    });
+
+    const rawResponseBody = await response.text();
+    const data = safeJsonParse(rawResponseBody);
+
+    if (!response.ok) {
+      return jsonResponse({ error: extractAnthropicError(data, response.status) }, 500);
+    }
+
+    const raw = data?.content?.find((block) => block.type === "text")?.text || "{}";
+    const clean = raw.replace(/```json|```/g, "").trim();
+    const characterSheets = JSON.parse(jsonrepair(clean));
+
+    return jsonResponse({ characterSheets });
+  } catch (err) {
+    return jsonResponse({ error: `Errore interno: ${err.message}` }, 500);
+  }
+};
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -361,6 +509,10 @@ export default {
 
     if (url.pathname === "/api/analyze") {
       return handleAnalyze(request, env);
+    }
+
+    if (url.pathname === "/api/character-sheets") {
+      return handleCharacterSheets(request, env);
     }
 
     if (env.ASSETS) {
