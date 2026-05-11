@@ -180,143 +180,135 @@ function OnboardingLanding({ onStart }) {
   }, []);
 
   const featureRows = [
-    ["DeepFrame Script", "Formatter, parsing sceneggiatura, analisi narrativa ed export."],
-    ["DeepFrame Director", "Shotlist AI, mood, regia e sviluppo visivo delle scene."],
-    ["DeepFrame Production", "Breakdown, continuity, reparti e pianificazione di produzione."],
-    ["DeepFrame Education", "Rubriche, valutazioni, workflow didattici e percorsi formativi."],
+    ["Script Intelligence", "Analisi narrativa, parsing automatico e sviluppo creativo della sceneggiatura."],
+    ["Direction Tools", "Shotlist, visual storytelling e supporto registico avanzato."],
+    ["Production Workflow", "Breakdown, continuity e organizzazione creativa della produzione."],
+    ["Education", "Strumenti dedicati a scuole, accademie e formazione audiovisiva."],
   ];
 
-  const flowSteps = [
-    ["1", "DeepFrame Script", "Il formatter attuale diventa il primo modulo operativo dell'ecosistema."],
-    ["2", "Espandi il workflow", "Analisi, produzione, regia, education e XR saranno moduli collegati."],
-    ["3", "Costruisci per fasi", "Si parte dallo script e si cresce verso un sistema creativo audiovisivo."],
+  const sideItems = [
+    "Script Intelligence",
+    "Scene Analysis",
+    "Shotlist AI",
+    "Continuity Checker",
+    "Production Workflow",
+    "Education Mode",
+    "XR Narrative",
   ];
 
   const s = {
-    page: { minHeight: "100vh", background: "#0b0b0f", color: "#f4efe2", fontFamily: "Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif", overflowX: "hidden" },
-    nav: { minHeight: "72px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", padding: isNarrow ? "14px 18px" : "0 40px", borderBottom: "1px solid rgba(255,255,255,.08)", boxSizing: "border-box" },
-    brand: { display: "flex", alignItems: "center", gap: "12px", fontWeight: 700, fontSize: "15px" },
-    mark: { width: "34px", height: "34px", borderRadius: "7px", background: "#c8a96e", color: "#111", display: "grid", placeItems: "center", fontFamily: "Georgia,serif", fontWeight: 700 },
-    navBtn: { border: "1px solid rgba(255,255,255,.18)", background: "rgba(255,255,255,.06)", color: "#f4efe2", borderRadius: "7px", padding: "9px 14px", fontWeight: 700, cursor: "pointer", fontSize: "13px" },
-    hero: { minHeight: isNarrow ? "auto" : "calc(86vh - 72px)", position: "relative", display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "minmax(280px, 0.9fr) minmax(360px, 1.1fr)", gap: isNarrow ? "28px" : "42px", alignItems: "center", padding: isNarrow ? "36px 18px 44px" : "44px 40px 58px", boxSizing: "border-box", background: "#111118" },
-    copy: { position: "relative", zIndex: 2, maxWidth: "640px" },
-    eyebrow: { fontSize: "12px", textTransform: "uppercase", letterSpacing: "1.4px", color: "#80CBC4", fontWeight: 800, marginBottom: "14px" },
-    title: { fontFamily: "Georgia,serif", fontSize: "clamp(40px, 6vw, 82px)", lineHeight: 0.95, margin: "0 0 20px", color: "#fff7e8", letterSpacing: 0 },
-    lead: { color: "#c8ccd7", fontSize: "clamp(16px, 2vw, 20px)", lineHeight: 1.55, maxWidth: "560px", margin: "0 0 28px" },
-    ctaRow: { display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" },
-    cta: { border: "none", background: "#c8a96e", color: "#121217", borderRadius: "7px", padding: "13px 18px", fontWeight: 800, cursor: "pointer", fontSize: "14px" },
-    secondary: { color: "#9ea5b5", fontSize: "13px", lineHeight: 1.5 },
-    mockWrap: { position: "relative", zIndex: 1, minHeight: isNarrow ? "360px" : "540px", display: "flex", alignItems: "center", justifyContent: "center" },
-    mock: { width: "min(720px, 100%)", minHeight: isNarrow ? "340px" : "500px", background: "#171820", border: "1px solid rgba(255,255,255,.12)", borderRadius: "8px", boxShadow: "0 30px 90px rgba(0,0,0,.45)", overflow: "hidden" },
-    mockTop: { height: "42px", borderBottom: "1px solid rgba(255,255,255,.08)", display: "flex", alignItems: "center", gap: "7px", padding: "0 14px", background: "#20222b" },
-    dot: { width: "9px", height: "9px", borderRadius: "50%" },
-    mockBody: { display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "210px 1fr", minHeight: isNarrow ? "298px" : "458px" },
-    mockSide: { borderRight: isNarrow ? "none" : "1px solid rgba(255,255,255,.08)", borderBottom: isNarrow ? "1px solid rgba(255,255,255,.08)" : "none", padding: isNarrow ? "12px" : "18px", display: "flex", flexDirection: isNarrow ? "row" : "column", gap: isNarrow ? "8px" : "13px", background: "#12131a", overflowX: isNarrow ? "auto" : "visible" },
-    mockPanel: { border: "1px solid rgba(255,255,255,.1)", borderRadius: "7px", padding: "12px", background: "rgba(255,255,255,.035)" },
-    mockMain: { padding: isNarrow ? "18px" : "22px", background: "#f7f5ef", color: "#1d1d1f", fontFamily: "'Courier New', monospace", fontSize: isNarrow ? "11px" : "12px", lineHeight: 1.7 },
-    band: { display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "repeat(4, minmax(0, 1fr))", gap: "1px", background: "rgba(255,255,255,.08)" },
-    feature: { background: "#101117", padding: "24px 22px", minHeight: "116px", boxSizing: "border-box" },
-    featureTitle: { color: "#f4efe2", fontWeight: 800, fontSize: "14px", marginBottom: "8px" },
-    featureText: { color: "#949cac", fontSize: "13px", lineHeight: 1.55 },
-    section: { padding: isNarrow ? "42px 18px 54px" : "54px 40px 68px", background: "#f3f0e8", color: "#171820" },
-    sectionInner: { maxWidth: "1180px", margin: "0 auto" },
-    sectionTitle: { fontFamily: "Georgia,serif", fontSize: "34px", lineHeight: 1.1, margin: "0 0 24px", letterSpacing: 0 },
-    sectionLead: { maxWidth: "760px", color: "#5d6270", fontSize: "15px", lineHeight: 1.65, margin: "0 0 28px" },
-    steps: { display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "repeat(3, minmax(0, 1fr))", gap: "14px" },
-    step: { borderTop: "3px solid #c8a96e", background: "#fff", borderRadius: "7px", padding: "20px", boxShadow: "0 8px 24px rgba(20,20,20,.06)" },
-    stepNum: { color: "#0277BD", fontSize: "13px", fontWeight: 900, marginBottom: "16px" },
-    stepTitle: { fontSize: "18px", fontWeight: 800, marginBottom: "8px" },
-    stepText: { color: "#5d6270", fontSize: "14px", lineHeight: 1.55 },
+    page: { minHeight: "100vh", margin: 0, background: "#0b0b0b", color: "#f2f2f2", fontFamily: "Arial, Helvetica, sans-serif", overflowX: "hidden" },
+    hero: { minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: isNarrow ? "56px 18px 44px" : "72px 40px 80px", boxSizing: "border-box", background: "linear-gradient(180deg,#0b0b0b,#151515)" },
+    logo: { width: "min(86vw, 980px)", maxHeight: isNarrow ? "210px" : "350px", objectFit: "contain", display: "block", margin: "0 auto" },
+    subtitle: { marginTop: isNarrow ? "10px" : "22px", maxWidth: "850px", fontSize: isNarrow ? "18px" : "22px", lineHeight: 1.6, color: "#b0b0b0" },
+    ctaRow: { marginTop: isNarrow ? "28px" : "40px", display: "flex", gap: "14px", justifyContent: "center", alignItems: "center", flexWrap: "wrap" },
+    cta: { textDecoration: "none", color: "#fff", background: "#58a6ff", padding: isNarrow ? "14px 18px" : "16px 28px", borderRadius: "10px", border: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: "48px", fontWeight: 800, cursor: "pointer", fontSize: "15px" },
+    ghostCta: { textDecoration: "none", color: "#f2f2f2", background: "rgba(255,255,255,.08)", border: "1px solid #2a2a2a", padding: isNarrow ? "13px 18px" : "15px 28px", borderRadius: "10px", display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: "48px", fontWeight: 800, cursor: "pointer", fontSize: "15px" },
+    mock: { marginTop: isNarrow ? "44px" : "60px", width: "100%", maxWidth: "1200px", background: "#161616", borderRadius: isNarrow ? "16px" : "22px", border: "1px solid #2a2a2a", overflow: "hidden", boxShadow: "0 0 60px rgba(0,0,0,0.6)", textAlign: "left" },
+    mockTop: { height: isNarrow ? "44px" : "52px", background: "#1f1f1f", display: "flex", alignItems: "center", padding: "0 20px", borderBottom: "1px solid #2c2c2c" },
+    dot: { width: isNarrow ? "10px" : "12px", height: isNarrow ? "10px" : "12px", borderRadius: "50%", marginRight: "8px" },
+    mockBody: { display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "280px 1fr", minHeight: isNarrow ? "auto" : "620px" },
+    sidebar: { background: "#131313", borderRight: isNarrow ? "none" : "1px solid #262626", borderBottom: isNarrow ? "1px solid #262626" : "none", padding: isNarrow ? "18px" : "24px" },
+    sideTitle: { color: "#58a6ff", margin: "0 0 20px", fontSize: "20px" },
+    sideItem: { background: "#1e1e1e", padding: "14px", borderRadius: "10px", marginBottom: "12px", color: "#d8d8d8", fontSize: "14px" },
+    main: { padding: isNarrow ? "18px" : "30px" },
+    scene: { background: "#1b1b1b", border: "1px solid #2d2d2d", borderRadius: "14px", padding: isNarrow ? "18px" : "24px", marginBottom: "20px" },
+    sceneTitle: { color: "#58a6ff", margin: "0 0 14px", fontSize: isNarrow ? "20px" : "24px", lineHeight: 1.2 },
+    sceneText: { color: "#d0d0d0", lineHeight: 1.65, margin: 0, fontSize: isNarrow ? "15px" : "16px" },
+    badges: { marginTop: "15px", display: "flex", gap: "10px", flexWrap: "wrap" },
+    badge: { display: "inline-block", background: "#262626", color: "#cccccc", padding: "8px 12px", borderRadius: "999px", fontSize: "14px" },
+    section: { maxWidth: "1200px", margin: "0 auto", padding: isNarrow ? "70px 18px" : "100px 40px" },
+    sectionTitle: { margin: 0, fontSize: isNarrow ? "32px" : "42px", lineHeight: 1.1 },
+    sectionLead: { margin: "18px 0 0", maxWidth: "820px", color: "#b0b0b0", lineHeight: 1.65, fontSize: isNarrow ? "17px" : "19px" },
+    grid: { display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "repeat(4, minmax(0, 1fr))", gap: "24px", marginTop: "40px" },
+    card: { background: "#161616", border: "1px solid #2a2a2a", borderRadius: "18px", padding: "28px" },
+    cardTitle: { color: "#58a6ff", margin: "0 0 14px", fontSize: "19px" },
+    cardText: { color: "#c9c9c9", margin: 0, lineHeight: 1.6 },
+    footer: { borderTop: "1px solid #222", padding: isNarrow ? "44px 20px" : "60px 20px", textAlign: "center", color: "#888" },
   };
 
   return (
     <div style={s.page}>
-      <div style={s.nav}>
-        <div style={s.brand}>
-          <div style={s.mark}>S</div>
-          <span>DeepFrame</span>
-        </div>
-        <button type="button" style={s.navBtn} onClick={onStart}>Apri app</button>
-      </div>
-
       <section style={s.hero}>
-        <div style={s.copy}>
-          <div style={s.eyebrow}>Beyond Screenwriting</div>
-          <h1 style={s.title}>DeepFrame</h1>
-          <p style={s.lead}>
-            Un ecosistema creativo per trasformare sceneggiature, regia, produzione, didattica e XR in un workflow audiovisivo integrato.
-            Il primo modulo operativo è DeepFrame Script: formattazione, analisi narrativa, breakdown ed export.
-          </p>
-          <div style={s.ctaRow}>
-            <button type="button" style={s.cta} onClick={onStart}>Apri DeepFrame Script</button>
-            <div style={s.secondary}>Il formatter resta il nucleo iniziale. I moduli futuri estendono il lavoro verso regia, produzione, education e XR.</div>
-          </div>
+        <img src="/deepframe_logo_concept.png" alt="DeepFrame - Beyond Screenwriting." style={s.logo} />
+        <div style={s.subtitle}>
+          Un ecosistema creativo per sviluppare, analizzare e trasformare storie in esperienze audiovisive.
         </div>
 
-        <div style={s.mockWrap} aria-hidden="true">
-          <div style={s.mock}>
-            <div style={s.mockTop}>
-              <span style={{ ...s.dot, background: "#FF8A65" }} />
-              <span style={{ ...s.dot, background: "#FFD54F" }} />
-              <span style={{ ...s.dot, background: "#80CBC4" }} />
-            </div>
-            <div style={s.mockBody}>
-              <div style={s.mockSide}>
-                <div style={s.mockPanel}>
-                  <div style={{ color: "#c8a96e", fontSize: "11px", fontWeight: 800, marginBottom: "8px" }}>API Anthropic personale</div>
-                  <div style={{ height: "28px", borderRadius: "5px", background: "#0c0d12", border: "1px solid rgba(255,255,255,.12)" }} />
-                </div>
-                <div style={s.mockPanel}>
-                  <div style={{ height: "64px", borderRadius: "5px", background: "rgba(255,255,255,.05)" }} />
-                </div>
-                {["Formatta Sceneggiatura", "Analisi Drammaturgica", "Schede Personaggio", "Breakdown Reparti"].map((label) => (
-                  <div key={label} style={{ borderRadius: "6px", padding: "10px 12px", background: label === "Formatta Sceneggiatura" ? "#c8a96e" : "rgba(255,255,255,.07)", color: label === "Formatta Sceneggiatura" ? "#111" : "#d6d9e2", fontSize: "11px", fontWeight: 800 }}>
-                    {label}
-                  </div>
-                ))}
-              </div>
-              <div style={s.mockMain}>
-                <div style={{ textAlign: "center", fontWeight: 700, marginBottom: "34px" }}>LA NOTTE DEL PONTE</div>
-                <div style={{ fontWeight: 700, textDecoration: "underline", marginBottom: "8px" }}>EST. PONTE SUL FIUME - NOTTE</div>
-                <div>La pioggia batte sull'asfalto. Le luci della citta tremano nell'acqua nera.</div>
-                <div style={{ marginLeft: "190px", marginTop: "22px", fontWeight: 700 }}>MARTA</div>
-                <div style={{ marginLeft: "96px", marginRight: "90px" }}>Se attraversiamo adesso, non torniamo piu indietro.</div>
-                <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", fontFamily: "Inter, system-ui, sans-serif", fontSize: "11px" }}>
-                  {["3 atti", "5 scene", "2 location"].map((label) => (
-                    <div key={label} style={{ background: "#e8e1d1", borderRadius: "6px", padding: "9px", textAlign: "center", fontWeight: 800 }}>{label}</div>
+        <div style={s.ctaRow}>
+          <button type="button" style={s.cta} onClick={onStart}>Apri DeepFrame Script</button>
+          <button
+            type="button"
+            style={s.ghostCta}
+            onClick={() => document.getElementById("deepframe-ecosystem")?.scrollIntoView({ behavior: "smooth" })}
+          >
+            Esplora la visione
+          </button>
+        </div>
+
+        <div style={s.mock}>
+          <div style={s.mockTop}>
+            <span style={{ ...s.dot, background: "#ff5f57" }} />
+            <span style={{ ...s.dot, background: "#febc2e" }} />
+            <span style={{ ...s.dot, background: "#28c840" }} />
+          </div>
+          <div style={s.mockBody}>
+            <aside style={s.sidebar}>
+              <h3 style={s.sideTitle}>DeepFrame</h3>
+              {sideItems.map((item) => (
+                <div key={item} style={s.sideItem}>{item}</div>
+              ))}
+            </aside>
+            <main style={s.main}>
+              <article style={s.scene}>
+                <h2 style={s.sceneTitle}>INT. APARTMENT - NIGHT</h2>
+                <p style={s.sceneText}>
+                  Marco enters the apartment slowly. The room is illuminated only by the television light.
+                  A distant sound echoes from the kitchen.
+                </p>
+                <div style={s.badges}>
+                  {["50mm Lens Suggested", "Low Key Lighting", "Emotional Tension: High", "Production Complexity: Medium"].map((badge) => (
+                    <span key={badge} style={s.badge}>{badge}</span>
                   ))}
                 </div>
-              </div>
-            </div>
+              </article>
+
+              <article style={s.scene}>
+                <h2 style={s.sceneTitle}>Creative Analysis</h2>
+                <p style={s.sceneText}>
+                  The scene builds psychological tension through silence and negative space.
+                  Suggested camera movement: slow handheld push-in.
+                </p>
+                <div style={s.badges}>
+                  {["Suggested Mood: Suspense", "Shotlist Generated", "Continuity Verified"].map((badge) => (
+                    <span key={badge} style={s.badge}>{badge}</span>
+                  ))}
+                </div>
+              </article>
+            </main>
           </div>
         </div>
       </section>
 
-      <div style={s.band}>
-        {featureRows.map(([title, text]) => (
-          <div key={title} style={s.feature}>
-            <div style={s.featureTitle}>{title}</div>
-            <div style={s.featureText}>{text}</div>
-          </div>
-        ))}
-      </div>
-
-      <section style={s.section}>
-        <div style={s.sectionInner}>
-          <h2 style={s.sectionTitle}>Da formatter a ecosistema creativo.</h2>
-          <p style={s.sectionLead}>
-            DeepFrame parte dal lavoro sulla sceneggiatura, ma prepara una struttura modulare per accompagnare il filmmaker dal testo alla regia, dalla produzione alla formazione.
-          </p>
-          <div style={s.steps}>
-            {flowSteps.map(([num, title, text]) => (
-              <div key={num} style={s.step}>
-                <div style={s.stepNum}>STEP {num}</div>
-                <div style={s.stepTitle}>{title}</div>
-                <div style={s.stepText}>{text}</div>
-              </div>
-            ))}
-          </div>
+      <section id="deepframe-ecosystem" style={s.section}>
+        <h2 style={s.sectionTitle}>Creative Workflow Ecosystem</h2>
+        <p style={s.sectionLead}>
+          DeepFrame parte dalla sceneggiatura e prepara un percorso modulare per regia,
+          produzione, formazione e nuove esperienze audiovisive.
+        </p>
+        <div style={s.grid}>
+          {featureRows.map(([title, text]) => (
+            <div key={title} style={s.card}>
+              <h3 style={s.cardTitle}>{title}</h3>
+              <p style={s.cardText}>{text}</p>
+            </div>
+          ))}
         </div>
+      </section>
+
+      <section style={s.footer}>
+        <div>DeepFrame - Beyond Screenwriting.</div>
+        <div style={{ marginTop: "10px" }}>Creative Workflow Ecosystem for Filmmakers</div>
       </section>
 
       <style>{`
