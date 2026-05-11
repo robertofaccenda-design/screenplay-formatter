@@ -180,16 +180,16 @@ function OnboardingLanding({ onStart }) {
   }, []);
 
   const featureRows = [
-    ["Formattazione", "Trasforma testo grezzo in una struttura da sceneggiatura leggibile e ordinata."],
-    ["Analisi", "Legge struttura, personaggi, scene, segnalazioni e valutazione didattica."],
-    ["Produzione", "Genera schede personaggio, location e breakdown per reparti."],
-    ["BYOK", "Ogni utente puo usare la propria chiave Anthropic, senza inserirla nel codice."],
+    ["DeepFrame Script", "Formatter, parsing sceneggiatura, analisi narrativa ed export."],
+    ["DeepFrame Director", "Shotlist AI, mood, regia e sviluppo visivo delle scene."],
+    ["DeepFrame Production", "Breakdown, continuity, reparti e pianificazione di produzione."],
+    ["DeepFrame Education", "Rubriche, valutazioni, workflow didattici e percorsi formativi."],
   ];
 
   const flowSteps = [
-    ["1", "Carica o incolla", "Importa un file TXT, DOCX o incolla direttamente il testo della scena."],
-    ["2", "Inserisci la chiave", "Aggiungi la tua API key Anthropic personale o usa quella del Worker, se configurata."],
-    ["3", "Genera gli output", "Formatta, analizza, crea schede e scarica il risultato in Fountain o HTML."],
+    ["1", "DeepFrame Script", "Il formatter attuale diventa il primo modulo operativo dell'ecosistema."],
+    ["2", "Espandi il workflow", "Analisi, produzione, regia, education e XR saranno moduli collegati."],
+    ["3", "Costruisci per fasi", "Si parte dallo script e si cresce verso un sistema creativo audiovisivo."],
   ];
 
   const s = {
@@ -221,6 +221,7 @@ function OnboardingLanding({ onStart }) {
     section: { padding: isNarrow ? "42px 18px 54px" : "54px 40px 68px", background: "#f3f0e8", color: "#171820" },
     sectionInner: { maxWidth: "1180px", margin: "0 auto" },
     sectionTitle: { fontFamily: "Georgia,serif", fontSize: "34px", lineHeight: 1.1, margin: "0 0 24px", letterSpacing: 0 },
+    sectionLead: { maxWidth: "760px", color: "#5d6270", fontSize: "15px", lineHeight: 1.65, margin: "0 0 28px" },
     steps: { display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "repeat(3, minmax(0, 1fr))", gap: "14px" },
     step: { borderTop: "3px solid #c8a96e", background: "#fff", borderRadius: "7px", padding: "20px", boxShadow: "0 8px 24px rgba(20,20,20,.06)" },
     stepNum: { color: "#0277BD", fontSize: "13px", fontWeight: 900, marginBottom: "16px" },
@@ -233,22 +234,22 @@ function OnboardingLanding({ onStart }) {
       <div style={s.nav}>
         <div style={s.brand}>
           <div style={s.mark}>S</div>
-          <span>Screenplay Formatter AI</span>
+          <span>DeepFrame</span>
         </div>
         <button type="button" style={s.navBtn} onClick={onStart}>Apri app</button>
       </div>
 
       <section style={s.hero}>
         <div style={s.copy}>
-          <div style={s.eyebrow}>Onboarding per sceneggiature AI</div>
-          <h1 style={s.title}>Screenplay Formatter AI</h1>
+          <div style={s.eyebrow}>Beyond Screenwriting</div>
+          <h1 style={s.title}>DeepFrame</h1>
           <p style={s.lead}>
-            Un ambiente di lavoro per trasformare bozze, scene e testi grezzi in sceneggiature formattate,
-            con analisi drammaturgica, schede operative e gestione BYOK per le chiavi Anthropic personali.
+            Un ecosistema creativo per trasformare sceneggiature, regia, produzione, didattica e XR in un workflow audiovisivo integrato.
+            Il primo modulo operativo è DeepFrame Script: formattazione, analisi narrativa, breakdown ed export.
           </p>
           <div style={s.ctaRow}>
-            <button type="button" style={s.cta} onClick={onStart}>Inizia a formattare</button>
-            <div style={s.secondary}>Nessuna registrazione nell'app. La chiave personale resta nel browser se scegli di ricordarla.</div>
+            <button type="button" style={s.cta} onClick={onStart}>Apri DeepFrame Script</button>
+            <div style={s.secondary}>Il formatter resta il nucleo iniziale. I moduli futuri estendono il lavoro verso regia, produzione, education e XR.</div>
           </div>
         </div>
 
@@ -302,7 +303,10 @@ function OnboardingLanding({ onStart }) {
 
       <section style={s.section}>
         <div style={s.sectionInner}>
-          <h2 style={s.sectionTitle}>Tre passaggi per arrivare agli output.</h2>
+          <h2 style={s.sectionTitle}>Da formatter a ecosistema creativo.</h2>
+          <p style={s.sectionLead}>
+            DeepFrame parte dal lavoro sulla sceneggiatura, ma prepara una struttura modulare per accompagnare il filmmaker dal testo alla regia, dalla produzione alla formazione.
+          </p>
           <div style={s.steps}>
             {flowSteps.map(([num, title, text]) => (
               <div key={num} style={s.step}>
@@ -340,8 +344,8 @@ function AppGuidedOnboarding({ onClose, targets }) {
 
   const stepCopy = [
     {
-      title: "Benvenuto in Screenplay Formatter AI",
-      text: "Questa schermata è il punto di lavoro: qui trasformi una bozza in sceneggiatura, analisi e schede operative.",
+      title: "Benvenuto in DeepFrame Script",
+      text: "Questo è il primo modulo dell'ecosistema: qui trasformi una bozza in sceneggiatura, analisi e schede operative.",
       color: "#8B5CF6",
       target: "onboarding",
     },
@@ -1869,10 +1873,10 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
     <div style={s.app}>
       {/* HEADER */}
       <div style={s.header}>
-        <div style={s.logo}>🎬</div>
+        <div style={s.logo}>DF</div>
         <div>
-          <div style={{ fontSize: "20px", fontWeight: "bold", letterSpacing: ".5px", color: "#f0ead8" }}>Screenplay Formatter AI</div>
-          <div style={{ fontSize: "12px", color: "#888", marginTop: "2px", fontFamily: "sans-serif", letterSpacing: "1px", textTransform: "uppercase" }}>Formattazione · Analisi drammaturgica · Standard cinematografico</div>
+          <div style={{ fontSize: "20px", fontWeight: "bold", letterSpacing: ".5px", color: "#f0ead8" }}>DeepFrame Script</div>
+          <div style={{ fontSize: "12px", color: "#888", marginTop: "2px", fontFamily: "sans-serif", letterSpacing: "1px", textTransform: "uppercase" }}>Beyond Screenwriting · Script · Analisi · Produzione</div>
         </div>
         <button ref={onboardingButtonRef} type="button" onClick={openOnboarding} style={{ marginLeft: "auto", background: "rgba(255,255,255,.06)", color: "#ccc", border: "1px solid rgba(255,255,255,.12)", borderRadius: "7px", padding: "8px 12px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", fontFamily: "sans-serif" }}>
           Onboarding

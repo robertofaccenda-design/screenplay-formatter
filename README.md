@@ -1,8 +1,24 @@
-# Screenplay Formatter AI
+# DeepFrame Script
 
-Applicazione web per formattare, analizzare e preparare una sceneggiatura cinematografica con il supporto dell'AI.
+Modulo iniziale dell'ecosistema **DeepFrame — Beyond Screenwriting**.
 
-L'app prende un testo grezzo, caricato da file o incollato manualmente, e lo trasforma in una sceneggiatura strutturata. Dopo la formattazione, genera anche strumenti utili per scrittura, didattica e pre-produzione: analisi drammaturgica, schede personaggio, schede location e breakdown per reparti.
+DeepFrame nasce dall'evoluzione di Screenplay Formatter AI: da strumento per formattare sceneggiature a ecosistema creativo per storytelling, regia, produzione, didattica audiovisiva e workflow XR.
+
+Questo repository contiene il primo modulo operativo: **DeepFrame Script**. Il modulo prende un testo grezzo, caricato da file o incollato manualmente, e lo trasforma in una sceneggiatura strutturata. Dopo la formattazione, genera strumenti utili per scrittura, didattica e pre-produzione: analisi drammaturgica, schede personaggio, schede location, breakdown per reparti ed export professionali.
+
+## Visione Ecosistema
+
+DeepFrame non vuole essere solo un formatter o un software di produzione. La direzione è costruire un **Creative Workflow Ecosystem for Filmmakers**.
+
+Moduli previsti:
+
+| Modulo | Funzione |
+| --- | --- |
+| DeepFrame Script | Formattazione, parsing, analisi narrativa, export |
+| DeepFrame Director | Shotlist AI, mood analysis, sviluppo registico |
+| DeepFrame Production | Breakdown, continuity, call sheet, workflow reparti |
+| DeepFrame XR | Branching narrative, Unity export, storytelling immersivo |
+| DeepFrame Education | Rubriche, valutazioni, modalità docente, percorsi formativi |
 
 ## Cosa Fa
 
@@ -20,6 +36,9 @@ L'app prende un testo grezzo, caricato da file o incollato manualmente, e lo tra
 - Mostra la struttura degli elementi riconosciuti
 - Esporta in formato `.fountain`
 - Esporta in formato `.html`
+- Esporta in PDF continuo
+- Esporta in PDF con una scena per pagina
+- Mostra una stima in ottavi di pagina per ogni scena
 - Genera un'analisi drammaturgica
 - Genera schede personaggio
 - Genera schede location
