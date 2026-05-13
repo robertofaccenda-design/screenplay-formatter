@@ -53,6 +53,9 @@ interface StoryGenerationResult {
 }
 
 const cleanStoryText = (text: string): string => text
+  .replace(/^\s*#{1,6}\s*/, '')
+  .replace(/^\s*\*\*([^\n]+?)\*\*(?=\s*(?:\n|$))/i, '$1')
+  .replace(/\*\*/g, '')
   .replace(/```json\s*$/i, '')
   .replace(/```\s*$/i, '')
   .replace(/(?:^|\n)\s*-{3,}\s*(?:\n\s*)?(?:#{1,6}\s*)?(?:\*\*)?\s*(?:scelte|scelte\s*[-:]\s*matrice\s*json|matrice\s*json)(?:\*\*)?\s*:?\s*$/i, '')

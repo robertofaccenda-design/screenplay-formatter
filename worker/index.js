@@ -397,6 +397,9 @@ const missingApiKeyResponse = () => jsonResponse({
 }, 502);
 
 const cleanStoryText = (text) => text
+  .replace(/^\s*#{1,6}\s*/, "")
+  .replace(/^\s*\*\*([^\n]+?)\*\*(?=\s*(?:\n|$))/i, "$1")
+  .replace(/\*\*/g, "")
   .replace(/```json\s*$/i, "")
   .replace(/```\s*$/i, "")
   .replace(/(?:^|\n)\s*-{3,}\s*(?:\n\s*)?(?:#{1,6}\s*)?(?:\*\*)?\s*(?:scelte|scelte\s*[-:]\s*matrice\s*json|matrice\s*json)(?:\*\*)?\s*:?\s*$/i, "")
