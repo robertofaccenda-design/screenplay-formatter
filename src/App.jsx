@@ -10,6 +10,7 @@ const API_LOCATION_SHEETS  = "/api/location-sheets";
 const LUMINA_STUDIO_URL    = "https://lumina-studio-1033723633880.us-west1.run.app/";
 const ANTHROPIC_KEY_STORAGE = "screenplayFormatter.anthropicApiKey";
 const ANTHROPIC_SESSION_KEY_STORAGE = "screenplayFormatter.anthropicApiKey.session";
+const STORY_DRAFT_STORAGE = "screenplayFormatter.pendingStoryDraft";
 const AI_PROVIDER_STORAGE = "screenplayFormatter.aiProvider";
 const LM_STUDIO_ENDPOINT_STORAGE = "screenplayFormatter.lmStudioEndpoint";
 const LM_STUDIO_MODEL_STORAGE = "screenplayFormatter.lmStudioModel";
@@ -1939,6 +1940,38 @@ export default function App() {
   };
 
   useEffect(() => {
+    const pendingStoryDraft = window.localStorage.getItem(STORY_DRAFT_STORAGE);
+    if (pendingStoryDraft) {
+      try {
+        const parsedDraft = JSON.parse(pendingStoryDraft);
+        const draftText = typeof parsedDraft?.text === "string" ? parsedDraft.text : "";
+        if (draftText.trim()) {
+          setRawText(draftText);
+          setFile(null);
+          setElements(null);
+          setAnalysis(null);
+          setCharacterSheets(null);
+          setBreakdown(null);
+          setLocationSheets(null);
+          setActiveTab("preview");
+          window.localStorage.setItem(ONBOARDING_STORAGE, ONBOARDING_FLOW_VERSION);
+          window.localStorage.setItem(APP_TOUR_STORAGE, "true");
+          setOnboardingComplete(true);
+          setShowAppTour(false);
+        }
+      } catch {
+        if (pendingStoryDraft.trim()) {
+          setRawText(pendingStoryDraft);
+          window.localStorage.setItem(ONBOARDING_STORAGE, ONBOARDING_FLOW_VERSION);
+          window.localStorage.setItem(APP_TOUR_STORAGE, "true");
+          setOnboardingComplete(true);
+          setShowAppTour(false);
+        }
+      } finally {
+        window.localStorage.removeItem(STORY_DRAFT_STORAGE);
+      }
+    }
+
     const savedKey = window.localStorage.getItem(ANTHROPIC_KEY_STORAGE) || "";
     if (savedKey) {
       setAnthropicApiKey(savedKey);

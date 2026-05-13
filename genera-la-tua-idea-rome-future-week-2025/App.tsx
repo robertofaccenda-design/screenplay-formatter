@@ -13,6 +13,8 @@ import MusicPlayer from './components/MusicPlayer';
 declare const jspdf: any;
 declare const pdfjsLib: any;
 
+const STORY_DRAFT_STORAGE = 'screenplayFormatter.pendingStoryDraft';
+
 const narrativeStructures: { key: NarrativeStructureType, label: string }[] = [
     { key: 'viaggio_eroe', label: "Il Viaggio dell'Eroe" },
     { key: 'pixar', label: "Pixar Storytelling" },
@@ -501,6 +503,39 @@ const App: React.FC = () => {
     }
   };
 
+  const getDeepFrameDraftText = (): string => {
+    const title = `Titolo: ${storyTopic || 'Storia interattiva'}\n\n`;
+    const content = currentPathParts
+      .map((part, index) => {
+        const choiceLine = part.choiceThatLedHere
+          ? `Scelta precedente: ${part.choiceThatLedHere}\n\n`
+          : '';
+        return `ATTO ${index + 1}\n\n${choiceLine}${part.text}`;
+      })
+      .join('\n\n---\n\n');
+
+    return title + content;
+  };
+
+  const handleSendToDeepFrame = () => {
+    try {
+      localStorage.setItem(STORY_DRAFT_STORAGE, JSON.stringify({
+        title: storyTopic || 'Storia interattiva',
+        text: getDeepFrameDraftText(),
+        source: 'crea-la-tua-storia',
+        createdAt: new Date().toISOString(),
+      }));
+
+      const targetUrl = window.location.protocol === 'file:'
+        ? new URL('../index.html?storyDraft=1', window.location.href).href
+        : `${window.location.origin}/?storyDraft=1`;
+      window.location.href = targetUrl;
+    } catch (e) {
+      setError("Non riesco a preparare la storia per DeepFrame.");
+      console.error(e);
+    }
+  };
+
   const handleExportPDF = async () => {
     setIsExporting(true);
     setError('');
@@ -669,6 +704,7 @@ const App: React.FC = () => {
                 <div className="absolute right-0 mt-2 w-40 bg-white rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto z-20">
                     <button onClick={handleExportTXT} disabled={isExporting} className="block w-full text-left px-4 py-2 text-sm text-brand-text hover:bg-brand-secondary/50">Esporta in TXT</button>
                     <button onClick={handleExportPDF} disabled={isExporting} className="block w-full text-left px-4 py-2 text-sm text-brand-text hover:bg-brand-secondary/50">Esporta in PDF</button>
+                    <button onClick={handleSendToDeepFrame} disabled={isExporting || currentPathParts.length === 0} className="block w-full text-left px-4 py-2 text-sm text-brand-text hover:bg-brand-secondary/50 disabled:opacity-50">Apri in DeepFrame</button>
                 </div>
             </div>
             <button onClick={restartStory} className="px-3 py-2 text-sm bg-red-100 text-red-700 font-semibold rounded-md hover:bg-red-200 transition-colors whitespace-nowrap">Ricomincia</button>
@@ -718,6 +754,9 @@ const App: React.FC = () => {
                     </button>
                     <button onClick={handleExportPDF} disabled={isExporting} className="px-6 py-3 bg-brand-secondary text-brand-primary font-bold rounded-lg hover:bg-brand-secondary/80 transition-colors shadow-md disabled:opacity-50">
                         {isExporting ? 'Esportazione...' : 'Esporta in PDF'}
+                    </button>
+                    <button onClick={handleSendToDeepFrame} disabled={isExporting} className="px-6 py-3 bg-brand-accent text-white font-bold rounded-lg hover:bg-opacity-90 transition-colors shadow-md disabled:opacity-50">
+                        Apri in DeepFrame
                     </button>
                 </div>
               </div>
