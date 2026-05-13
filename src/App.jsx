@@ -1616,15 +1616,15 @@ export default function App() {
     if (f) handleFile(f);
   }, []);
 
-  const runFormatter = async () => {
+  const runFormatter = async (mode = "creative") => {
     if (!rawText.trim()) return;
     setLoading(true); setError(""); setElements(null); setAnalysis(null); setCharacterSheets(null); setBreakdown(null); setLocationSheets(null);
     try {
-      setLoadingMsg("Analisi del testo in corso...");
+      setLoadingMsg(mode === "conservative" ? "Parsing conservativo in corso..." : "Formattazione creativa in corso...");
       const response = await fetch(API_FORMAT, {
         method: "POST",
         headers: apiHeaders(),
-        body: JSON.stringify({ text: rawText }),
+        body: JSON.stringify({ text: rawText, mode }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Errore server");
@@ -1826,6 +1826,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
     keyBox:     { background: "rgba(255,255,255,.025)", border: "1px solid rgba(255,255,255,.1)", borderRadius: "8px", padding: "12px", display: "flex", flexDirection: "column", gap: "10px" },
     keyInput:   { width: "100%", background: "rgba(0,0,0,.22)", border: "1px solid rgba(255,255,255,.12)", borderRadius: "6px", color: "#ddd", fontFamily: "monospace", fontSize: "12px", padding: "10px", boxSizing: "border-box" },
     btn:        { background: "linear-gradient(135deg,#c8a96e,#b8994e)", color: "#0a0a0f", border: "none", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canFormat ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canFormat ? 1 : 0.4 },
+    btnConservative: { background: canFormat ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.03)", color: canFormat ? "#e8e8f0" : "#777", border: "1px solid rgba(255,255,255,.14)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canFormat ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canFormat ? 1 : 0.45 },
     btnAnalyze: { background: canAnalyze ? "linear-gradient(135deg,#7C4DFF,#651FFF)" : "rgba(124,77,255,.15)", color: canAnalyze ? "#fff" : "#7C4DFF", border: "1px solid rgba(124,77,255,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canAnalyze ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canAnalyze ? 1 : 0.5 },
     btnSheets:    { background: canRunSheets ? "linear-gradient(135deg,#00897B,#00695C)" : "rgba(0,137,123,.15)", color: canRunSheets ? "#fff" : "#00897B", border: "1px solid rgba(0,137,123,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canRunSheets ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canRunSheets ? 1 : 0.5 },
     btnBreakdown: { background: canRunBreakdown ? "linear-gradient(135deg,#E65100,#BF360C)" : "rgba(230,81,0,.15)", color: canRunBreakdown ? "#fff" : "#E65100", border: "1px solid rgba(230,81,0,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canRunBreakdown ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canRunBreakdown ? 1 : 0.5 },
@@ -1944,10 +1945,15 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
 
           {error && <div style={s.error}>⚠️ {error}</div>}
 
-          {/* Pulsante Formatta */}
-          <button ref={formatButtonRef} style={s.btn} disabled={!canFormat} onClick={runFormatter}>
-            {loading ? "Formattazione in corso..." : "Formatta Sceneggiatura"}
-          </button>
+          {/* Pulsanti Formatta */}
+          <div ref={formatButtonRef} style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <button style={s.btnConservative} disabled={!canFormat} onClick={() => runFormatter("conservative")}>
+              {loading ? "Parsing in corso..." : "Parsing Conservativo"}
+            </button>
+            <button style={s.btn} disabled={!canFormat} onClick={() => runFormatter("creative")}>
+              {loading ? "Formattazione in corso..." : "Formattazione Creativa"}
+            </button>
+          </div>
 
           {/* Pulsanti AI — appaiono solo dopo la formattazione */}
           {elements && (

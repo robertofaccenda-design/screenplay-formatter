@@ -3,7 +3,7 @@
 // La ANTHROPIC_API_KEY rimane sul server, mai esposta al browser
 import { jsonrepair } from 'jsonrepair'
 
-const SYSTEM_PROMPT = `Sei un esperto di sceneggiatura cinematografica professionale italiana e internazionale. Il tuo compito è analizzare un testo grezzo non formattato e restituire ESCLUSIVAMENTE un array JSON valido con gli elementi della sceneggiatura classificati e corretti.
+const CREATIVE_SYSTEM_PROMPT = `Sei un esperto di sceneggiatura cinematografica professionale italiana e internazionale. Il tuo compito è analizzare un testo grezzo non formattato e restituire ESCLUSIVAMENTE un array JSON valido con gli elementi della sceneggiatura classificati e corretti.
 
 REGOLE DI CLASSIFICAZIONE:
 - "scene_heading": intestazioni di scena. Iniziano con INT., EST., INT./EST. o equivalenti. Mettile SEMPRE in MAIUSCOLO. Formato: INT./EST. LUOGO - GIORNO/NOTTE/ALBA/TRAMONTO
@@ -25,6 +25,28 @@ REGOLE DI CORREZIONE:
 
 OUTPUT: Restituisci SOLO l'array JSON, senza markdown, senza backtick, senza spiegazioni.`;
 
+const CONSERVATIVE_SYSTEM_PROMPT = `Sei un parser conservativo di sceneggiature. Il tuo compito è trasformare un testo grezzo in un array JSON valido classificando ogni riga o blocco senza aggiungere contenuto e senza migliorare lo stile.
+
+REGOLE DI CLASSIFICAZIONE:
+- Usa solo questi tipi: "scene_heading", "action", "character", "parenthetical", "dialogue", "transition", "title", "blank".
+- Classifica le intestazioni di scena esistenti come "scene_heading" solo se sono gia presenti o chiaramente esplicite.
+- Classifica i nomi dei personaggi come "character" quando precedono una battuta.
+- Classifica le battute come "dialogue", le descrizioni come "action", le indicazioni tra parentesi come "parenthetical", le transizioni esistenti come "transition".
+- Mantieni le righe vuote come "blank" con content: "" quando servono a preservare la separazione.
+
+REGOLE DI NEUTRALITA:
+- Non aggiungere scene, intestazioni, azioni, personaggi, battute, transizioni o dettagli non presenti nel testo originale.
+- Non riscrivere in stile piu cinematografico.
+- Non correggere grammatica, ortografia, punteggiatura, accenti o tempi verbali, salvo normalizzare maiuscole/minuscole strettamente richieste dal formato per scene heading, character e transition.
+- Non completare frasi ambigue e non chiarire cio che il testo lascia implicito.
+- Se una riga e ambigua, scegli il tipo piu probabile ma lascia il contenuto invariato.
+
+OUTPUT: Restituisci SOLO l'array JSON, senza markdown, senza backtick, senza spiegazioni.`;
+
+const getSystemPrompt = (mode) => (
+  mode === "conservative" ? CONSERVATIVE_SYSTEM_PROMPT : CREATIVE_SYSTEM_PROMPT
+);
+
 export const handler = async (event) => {
   // Solo POST
   if (event.httpMethod !== 'POST') {
@@ -44,7 +66,8 @@ export const handler = async (event) => {
   }
 
   try {
-    const { text } = JSON.parse(event.body || '{}')
+    const { text, mode: rawMode } = JSON.parse(event.body || '{}')
+    const mode = rawMode === 'conservative' ? 'conservative' : 'creative'
     if (!text || text.trim().length < 10) {
       return {
         statusCode: 400,
@@ -72,11 +95,11 @@ export const handler = async (event) => {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 8000,
-        system: SYSTEM_PROMPT,
+        system: getSystemPrompt(mode),
         messages: [
           {
             role: 'user',
-            content: `Analizza e formatta il seguente testo come sceneggiatura cinematografica professionale:\n\n${text}`,
+            content: `${mode === 'conservative' ? 'Classifica in modo conservativo' : 'Analizza e formatta'} il seguente testo come sceneggiatura cinematografica professionale:\n\n${text}`,
           },
         ],
       }),
