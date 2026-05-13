@@ -140,20 +140,199 @@ SCHEMA ESATTO:
     "commento_docente": ""
   }
 }`,
-  characterSheets: `Sei un dramaturg e script analyst. Genera schede personaggio da una sceneggiatura JSON e restituisci ESCLUSIVAMENTE:
-{ "personaggi": [], "mappa_relazioni": [], "note_ensemble": "" }
-Per ogni personaggio includi, quando deducibile: nome, ruolo, presenza, profilo_narrativo, relazioni, conflitti, scheda_produzione, scheda_didattica. Non inventare: usa "non specificato". Restituisci SOLO JSON.`,
-  locationSheets: `Sei un location manager e scenografo. Genera schede location da una sceneggiatura JSON e restituisci ESCLUSIVAMENTE:
-{ "locations": [], "mappa_narrativa_locations": [], "riepilogo_produzione": {} }
-Per ogni location includi, quando deducibile: nome, identificativo, tipo, scene, atmosfera, funzione_drammaturgica, caratteristiche_tecniche, allestimento, scouting, piano_riprese, fotografia, scheda_didattica. Non inventare: usa "non specificato". Restituisci SOLO JSON.`,
-  breakdown: `Sei un direttore di produzione cinematografica. Genera un breakdown per reparti da una sceneggiatura JSON e restituisci ESCLUSIVAMENTE:
+  characterSheets: `Sei un dramaturg e script analyst. Genera schede personaggio dettagliate a partire da una sceneggiatura in formato JSON.
+
+ISTRUZIONI IMPORTANTI:
+- Non restituire "personaggi": [] se nella sceneggiatura ci sono elementi "character".
+- Includi tutti i personaggi con almeno una battuta se il testo e breve.
+- Usa "non_specificato" quando un dato non e deducibile.
+- Restituisci ESCLUSIVAMENTE un oggetto JSON valido, senza markdown e senza spiegazioni.
+
+SCHEMA ESATTO:
 {
-  "riepilogo": {},
-  "per_scena": [],
-  "reparti": { "cast": [], "locations": [], "props": [], "costumi": [], "effetti_speciali": [], "audio_musica": [], "veicoli": [] },
-  "piano_riprese_suggerito": []
-}
-Estrai solo elementi presenti o chiaramente deducibili. Restituisci SOLO JSON.`,
+  "personaggi": [
+    {
+      "nome": "NOME IN MAIUSCOLO",
+      "ruolo": "protagonista",
+      "genere_presunto": "non_specificato",
+      "presenza": {
+        "scene_totali": 1,
+        "prima_scena": 1,
+        "ultima_scena": 1,
+        "scene_numeri": [1],
+        "battute_totali": 1,
+        "percentuale_dialogo": "0%"
+      },
+      "profilo_narrativo": {
+        "descrizione_in_una_riga": "",
+        "motivazione_principale": "non_specificato",
+        "bisogno_profondo": "non_specificato",
+        "paura_principale": "non_specificato",
+        "difetto_principale": "non_specificato",
+        "pregio_principale": "non_specificato",
+        "arco_narrativo": "non_specificato",
+        "citazione_rappresentativa": "non_specificato"
+      },
+      "relazioni": [],
+      "conflitti": {
+        "interno": "non_specificato",
+        "interpersonale": "non_specificato",
+        "sociale_o_ambientale": "non_specificato"
+      },
+      "scheda_produzione": {
+        "caratteristiche_fisiche_deducibili": "non_specificato",
+        "costumi_accessori": "non_specificato",
+        "note_casting": "non_specificato",
+        "complessità_interpretativa": "media",
+        "presenza_scena_difficile": false,
+        "note_regia": "non_specificato"
+      },
+      "scheda_didattica": {
+        "funzione_drammaturgica": "",
+        "archetipo": "non_specificato",
+        "domande_per_l_autore": [],
+        "nota_docente": ""
+      }
+    }
+  ],
+  "mappa_relazioni": [],
+  "note_ensemble": ""
+}`,
+  locationSheets: `Sei un location manager e scenografo cinematografico. Genera schede location dettagliate a partire da una sceneggiatura in formato JSON.
+
+ISTRUZIONI IMPORTANTI:
+- Non restituire "locations": [] se nella sceneggiatura ci sono elementi "scene_heading".
+- Identifica ogni location univoca dalle intestazioni di scena.
+- Usa "non_specificato" quando un dato non e deducibile.
+- Restituisci ESCLUSIVAMENTE un oggetto JSON valido, senza markdown e senza spiegazioni.
+
+SCHEMA ESATTO:
+{
+  "locations": [
+    {
+      "nome": "",
+      "identificativo": "LOC-01",
+      "tipo": "INT",
+      "scene": [1],
+      "scene_count": 1,
+      "momenti_giornata": ["GIORNO"],
+      "personaggi_presenti": [],
+      "comparse_max_stimato": 0,
+      "descrizione_narrativa": "",
+      "atmosfera": "",
+      "funzione_drammaturgica": "",
+      "caratteristiche_tecniche": {
+        "dimensioni_stimate": "media",
+        "luce_naturale": "non_specificato",
+        "direzione_luce_preferibile": "non_specificato",
+        "acustica_stimata": "non_specificato",
+        "accessibilità_attrezzatura": "non_specificato",
+        "spazio_per_troupe": "non_specificato"
+      },
+      "allestimento": {
+        "livello": "minimo",
+        "elementi_scenografia_identificati": [],
+        "elementi_da_aggiungere": [],
+        "elementi_da_rimuovere": [],
+        "note_scenografo": "non_specificato"
+      },
+      "scouting": {
+        "tipo_ricerca": "da_valutare",
+        "caratteristiche_fondamentali": "",
+        "caratteristiche_desiderabili": "",
+        "problemi_potenziali": "",
+        "permessi_necessari": "probabilmente",
+        "alternative_studio": "non_specificato",
+        "note_logistiche": "non_specificato"
+      },
+      "piano_riprese": {
+        "giorni_stimati": 1,
+        "ore_stimate_totali": 4,
+        "scene_consigliate_nello_stesso_giorno": [1],
+        "note_ottimizzazione": ""
+      },
+      "fotografia": {
+        "stile_suggerito": "",
+        "sfide_fotografiche": "",
+        "riferimenti_visivi": "non_specificato"
+      },
+      "scheda_didattica": {
+        "concetto_chiave": "",
+        "relazione_spazio_personaggio": "",
+        "domande_per_studenti": [],
+        "nota_docente": ""
+      }
+    }
+  ],
+  "mappa_narrativa_locations": [],
+  "riepilogo_produzione": {
+    "totale_locations": 1,
+    "locations_interne": 1,
+    "locations_esterne": 0,
+    "giorni_totali_stimati": 1,
+    "location_più_complessa": "",
+    "location_più_ricorrente": "",
+    "budget_scenografia_indicativo": "contenuto",
+    "note_generali": ""
+  }
+}`,
+  breakdown: `Sei un direttore di produzione cinematografica. Genera un breakdown per reparti da una sceneggiatura JSON.
+
+ISTRUZIONI IMPORTANTI:
+- Non restituire array vuoti se nella sceneggiatura ci sono scene, personaggi, props o location deducibili.
+- Numera le scene in ordine progressivo usando "scene_heading".
+- Estrai cast dagli elementi "character".
+- Estrai locations dalle intestazioni di scena.
+- Usa "non_specificato" quando un dato non e deducibile.
+- Restituisci ESCLUSIVAMENTE un oggetto JSON valido, senza markdown e senza spiegazioni.
+
+SCHEMA ESATTO:
+{
+  "riepilogo": {
+    "totale_scene": 0,
+    "personaggi_parlanti": 0,
+    "location_uniche": 0,
+    "scene_interne": 0,
+    "scene_esterne": 0,
+    "scene_giorno": 0,
+    "scene_notte": 0,
+    "giorni_ripresa_stimati": 1,
+    "complessità_produttiva": "bassa",
+    "note_produzione": ""
+  },
+  "per_scena": [
+    {
+      "numero": 1,
+      "titolo": "",
+      "interno_esterno": "INT",
+      "momento": "NON_SPECIFICATO",
+      "cast": [],
+      "comparse_stimate": 0,
+      "props_principali": [],
+      "location_descrizione": "",
+      "complessità": "bassa",
+      "elementi_speciali": [],
+      "note_regia": ""
+    }
+  ],
+  "reparti": {
+    "cast": [],
+    "locations": [],
+    "props": [],
+    "costumi": [],
+    "effetti_speciali": [],
+    "audio_musica": [],
+    "veicoli": []
+  },
+  "piano_riprese_suggerito": [
+    {
+      "giorno": 1,
+      "scene_consigliate": [1],
+      "motivazione": "",
+      "ore_stimate": 4
+    }
+  ]
+}`,
 };
 
 const cleanAiJson = (value) => {
@@ -173,9 +352,12 @@ const cleanAiJson = (value) => {
   return JSON.parse(jsonrepair(text.slice(start, end + 1)));
 };
 
-const unwrapLocalPayload = (payload, key) => (
-  payload && typeof payload === "object" && key in payload ? payload[key] : payload
-);
+const unwrapLocalPayload = (payload, keys) => {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+  const candidates = Array.isArray(keys) ? keys : [keys];
+  const match = candidates.find((key) => key in payload);
+  return match ? payload[match] : payload;
+};
 
 const extractLmStudioContent = (data) => (
   data.choices?.[0]?.message?.content || data.choices?.[0]?.text || ""
@@ -1914,7 +2096,7 @@ export default function App() {
         temperature: mode === "conservative" ? 0 : 0.2,
         output: "array",
       });
-      setElements(isLocalAi ? unwrapLocalPayload(data, "elements") : data.elements);
+      setElements(isLocalAi ? unwrapLocalPayload(data, ["elements", "elementi"]) : data.elements);
       setActiveTab("preview");
     } catch (e) {
       setError("Errore: " + e.message);
@@ -1932,7 +2114,7 @@ export default function App() {
         user: `Analizza questa sceneggiatura in formato JSON. Il risultato deve popolare la dashboard, quindi non lasciare vuoti struttura.atti, analisi_scene, personaggi o valutazione_globale se nel testo ci sono dati disponibili:\n\n${JSON.stringify(elements)}`,
         temperature: 0.2,
       });
-      setAnalysis(isLocalAi ? unwrapLocalPayload(data, "analysis") : data.analysis);
+      setAnalysis(isLocalAi ? unwrapLocalPayload(data, ["analysis", "analisi"]) : data.analysis);
       setActiveTab("analisi");
       setAnalyTab("struttura");
     } catch (e) {
@@ -1951,7 +2133,7 @@ export default function App() {
         user: `Genera le schede personaggio complete per questa sceneggiatura:\n\n${JSON.stringify(elements)}`,
         temperature: 0.2,
       });
-      setCharacterSheets(isLocalAi ? unwrapLocalPayload(data, "characterSheets") : data.characterSheets);
+      setCharacterSheets(isLocalAi ? unwrapLocalPayload(data, ["characterSheets", "character_sheets", "schede_personaggio", "schedePersonaggio"]) : data.characterSheets);
       setActiveTab("schede");
     } catch (e) {
       setError("Errore schede: " + e.message);
@@ -1969,7 +2151,7 @@ export default function App() {
         user: `Genera le schede location complete per questa sceneggiatura:\n\n${JSON.stringify(elements)}`,
         temperature: 0.2,
       });
-      setLocationSheets(isLocalAi ? unwrapLocalPayload(data, "locationSheets") : data.locationSheets);
+      setLocationSheets(isLocalAi ? unwrapLocalPayload(data, ["locationSheets", "location_sheets", "schede_location", "schedeLocation"]) : data.locationSheets);
       setActiveTab("locations");
     } catch (e) {
       setError("Errore schede location: " + e.message);
@@ -1987,7 +2169,7 @@ export default function App() {
         user: `Genera il breakdown completo per reparti di questa sceneggiatura:\n\n${JSON.stringify(elements)}`,
         temperature: 0.2,
       });
-      setBreakdown(isLocalAi ? unwrapLocalPayload(data, "breakdown") : data.breakdown);
+      setBreakdown(isLocalAi ? unwrapLocalPayload(data, ["breakdown", "breakdown_reparti"]) : data.breakdown);
       setActiveTab("breakdown");
     } catch (e) {
       setError("Errore breakdown: " + e.message);
