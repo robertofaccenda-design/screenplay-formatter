@@ -44,6 +44,7 @@ Moduli previsti:
 - Genera schede location
 - Genera breakdown per reparti di produzione
 - Integra Lumina Studio in una scheda **Luci 3D** per simulazioni di setup luce
+- Permette di scegliere tra AI Anthropic su Cloudflare e modello locale via LM Studio
 
 ## Funzioni AI
 
@@ -212,6 +213,24 @@ ANTHROPIC_API_KEY
 ```
 
 La chiave non deve mai essere salvata nel codice, nel frontend o su GitHub.
+
+## Modello Locale Con LM Studio
+
+L'app può usare anche un modello locale esposto da LM Studio tramite server OpenAI-compatible.
+
+Impostazioni predefinite nell'interfaccia:
+
+```text
+Endpoint: http://127.0.0.1:1234/v1/chat/completions
+Modello: gemma-4
+```
+
+Note operative:
+
+- avvia LM Studio sul computer locale;
+- carica il modello scelto;
+- abilita il server locale OpenAI-compatible;
+- se usi la versione pubblicata su Cloudflare, la chiamata parte dal browser verso il tuo `localhost`, non dal Worker.
 
 ## Sviluppo Locale
 

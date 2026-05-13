@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import * as mammoth from "mammoth";
+import { jsonrepair } from "jsonrepair";
 
 const API_FORMAT           = "/api/format";
 const API_ANALYZE          = "/api/analyze";
@@ -8,6 +9,11 @@ const API_BREAKDOWN        = "/api/breakdown";
 const API_LOCATION_SHEETS  = "/api/location-sheets";
 const LUMINA_STUDIO_URL    = "https://lumina-studio-1033723633880.us-west1.run.app/";
 const ANTHROPIC_KEY_STORAGE = "screenplayFormatter.anthropicApiKey";
+const AI_PROVIDER_STORAGE = "screenplayFormatter.aiProvider";
+const LM_STUDIO_ENDPOINT_STORAGE = "screenplayFormatter.lmStudioEndpoint";
+const LM_STUDIO_MODEL_STORAGE = "screenplayFormatter.lmStudioModel";
+const DEFAULT_LM_STUDIO_ENDPOINT = "http://127.0.0.1:1234/v1/chat/completions";
+const DEFAULT_LM_STUDIO_MODEL = "gemma-4";
 const ONBOARDING_STORAGE = "screenplayFormatter.onboardingComplete";
 const APP_TOUR_STORAGE = "screenplayFormatter.appTourComplete";
 const ONBOARDING_FLOW_VERSION = "landing-before-tour-v1";
@@ -22,6 +28,85 @@ const typeColors = {
   scene_heading: "#4FC3F7", action: "#A5D6A7", character: "#FFD54F",
   parenthetical: "#CE93D8", dialogue: "#FFFFFF", transition: "#FF8A65",
   title: "#F48FB1", blank: "transparent",
+};
+
+const LOCAL_FORMAT_PROMPTS = {
+  creative: `Sei un esperto di sceneggiatura cinematografica professionale italiana e internazionale. Analizza un testo grezzo e restituisci ESCLUSIVAMENTE un array JSON valido con elementi di sceneggiatura.
+
+Tipi ammessi: "scene_heading", "action", "character", "parenthetical", "dialogue", "transition", "title", "blank".
+
+Regole:
+- Correggi errori ortografici e grammaticali minimi.
+- Mantieni la lingua originale.
+- Inferisci il tipo dal contesto.
+- Puoi aggiungere intestazioni di scena mancanti solo quando il contesto le rende necessarie.
+- Non inventare contenuto narrativo.
+- Ogni elemento deve avere: { "type": "<tipo>", "content": "<testo>" }.
+
+Restituisci SOLO l'array JSON, senza markdown, senza spiegazioni.`,
+  conservative: `Sei un parser conservativo di sceneggiature. Trasforma il testo in un array JSON classificando ogni riga o blocco senza aggiungere contenuto e senza migliorare lo stile.
+
+Tipi ammessi: "scene_heading", "action", "character", "parenthetical", "dialogue", "transition", "title", "blank".
+
+Regole:
+- Non aggiungere scene, intestazioni, azioni, personaggi, battute, transizioni o dettagli non presenti.
+- Non correggere grammatica, ortografia, punteggiatura, accenti o tempi verbali.
+- Normalizza maiuscole/minuscole solo quando strettamente richiesto dal formato per scene heading, character e transition.
+- Se una riga e ambigua, scegli il tipo piu probabile ma lascia il contenuto invariato.
+- Ogni elemento deve avere: { "type": "<tipo>", "content": "<testo>" }.
+
+Restituisci SOLO l'array JSON, senza markdown, senza spiegazioni.`,
+};
+
+const LOCAL_ANALYSIS_PROMPTS = {
+  analyze: `Sei un dramaturg e docente di sceneggiatura. Analizza una sceneggiatura in JSON e restituisci ESCLUSIVAMENTE un oggetto JSON valido con questi campi:
+{
+  "struttura": { "totale_scene": 0, "atti": [], "momenti_chiave": [] },
+  "personaggi": [],
+  "analisi_scene": [],
+  "segnalazioni": [],
+  "valutazione_globale": {
+    "punteggio_struttura": 0,
+    "punteggio_personaggi": 0,
+    "punteggio_dialoghi": 0,
+    "punteggio_ritmo": 0,
+    "punti_di_forza": [],
+    "aree_di_miglioramento": [],
+    "commento_docente": ""
+  }
+}
+Usa dati deducibili dalla sceneggiatura. Restituisci SOLO JSON.`,
+  characterSheets: `Sei un dramaturg e script analyst. Genera schede personaggio da una sceneggiatura JSON e restituisci ESCLUSIVAMENTE:
+{ "personaggi": [], "mappa_relazioni": [], "note_ensemble": "" }
+Per ogni personaggio includi, quando deducibile: nome, ruolo, presenza, profilo_narrativo, relazioni, conflitti, scheda_produzione, scheda_didattica. Non inventare: usa "non specificato". Restituisci SOLO JSON.`,
+  locationSheets: `Sei un location manager e scenografo. Genera schede location da una sceneggiatura JSON e restituisci ESCLUSIVAMENTE:
+{ "locations": [], "mappa_narrativa_locations": [], "riepilogo_produzione": {} }
+Per ogni location includi, quando deducibile: nome, identificativo, tipo, scene, atmosfera, funzione_drammaturgica, caratteristiche_tecniche, allestimento, scouting, piano_riprese, fotografia, scheda_didattica. Non inventare: usa "non specificato". Restituisci SOLO JSON.`,
+  breakdown: `Sei un direttore di produzione cinematografica. Genera un breakdown per reparti da una sceneggiatura JSON e restituisci ESCLUSIVAMENTE:
+{
+  "riepilogo": {},
+  "per_scena": [],
+  "reparti": { "cast": [], "locations": [], "props": [], "costumi": [], "effetti_speciali": [], "audio_musica": [], "veicoli": [] },
+  "piano_riprese_suggerito": []
+}
+Estrai solo elementi presenti o chiaramente deducibili. Restituisci SOLO JSON.`,
+};
+
+const cleanAiJson = (value) => {
+  const text = String(value || "").trim()
+    .replace(/^```(?:json)?/i, "")
+    .replace(/```$/i, "")
+    .trim();
+  const firstArray = text.indexOf("[");
+  const firstObject = text.indexOf("{");
+  const starts = [firstArray, firstObject].filter((index) => index >= 0);
+  if (!starts.length) throw new Error("La risposta del modello locale non contiene JSON.");
+  const start = Math.min(...starts);
+  const endArray = text.lastIndexOf("]");
+  const endObject = text.lastIndexOf("}");
+  const end = Math.max(endArray, endObject);
+  if (end < start) throw new Error("La risposta del modello locale non contiene JSON completo.");
+  return JSON.parse(jsonrepair(text.slice(start, end + 1)));
 };
 
 // ─── Colori e icone per l'analisi ───────────────────────────────────────────
@@ -1567,6 +1652,9 @@ export default function App() {
   const [anthropicApiKey, setAnthropicApiKey] = useState("");
   const [rememberApiKey, setRememberApiKey] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [aiProvider, setAiProvider] = useState("anthropic");
+  const [lmStudioEndpoint, setLmStudioEndpoint] = useState(DEFAULT_LM_STUDIO_ENDPOINT);
+  const [lmStudioModel, setLmStudioModel] = useState(DEFAULT_LM_STUDIO_MODEL);
   const fileInputRef = useRef();
   const onboardingButtonRef = useRef();
   const dropzoneRef = useRef();
@@ -1601,6 +1689,9 @@ export default function App() {
       setAnthropicApiKey(savedKey);
       setRememberApiKey(true);
     }
+    setAiProvider(window.localStorage.getItem(AI_PROVIDER_STORAGE) || "anthropic");
+    setLmStudioEndpoint(window.localStorage.getItem(LM_STUDIO_ENDPOINT_STORAGE) || DEFAULT_LM_STUDIO_ENDPOINT);
+    setLmStudioModel(window.localStorage.getItem(LM_STUDIO_MODEL_STORAGE) || DEFAULT_LM_STUDIO_MODEL);
   }, []);
 
   useEffect(() => {
@@ -1611,11 +1702,62 @@ export default function App() {
     window.localStorage.removeItem(ANTHROPIC_KEY_STORAGE);
   }, [anthropicApiKey, rememberApiKey]);
 
+  useEffect(() => {
+    window.localStorage.setItem(AI_PROVIDER_STORAGE, aiProvider);
+  }, [aiProvider]);
+
+  useEffect(() => {
+    window.localStorage.setItem(LM_STUDIO_ENDPOINT_STORAGE, lmStudioEndpoint.trim() || DEFAULT_LM_STUDIO_ENDPOINT);
+  }, [lmStudioEndpoint]);
+
+  useEffect(() => {
+    window.localStorage.setItem(LM_STUDIO_MODEL_STORAGE, lmStudioModel.trim() || DEFAULT_LM_STUDIO_MODEL);
+  }, [lmStudioModel]);
+
   const apiHeaders = () => {
     const headers = { "Content-Type": "application/json" };
     const trimmedKey = anthropicApiKey.trim();
     if (trimmedKey) headers["X-Anthropic-API-Key"] = trimmedKey;
     return headers;
+  };
+
+  const isLocalAi = aiProvider === "lmstudio";
+
+  const runLocalLmStudio = async ({ system, user, temperature = 0.1 }) => {
+    const endpoint = lmStudioEndpoint.trim() || DEFAULT_LM_STUDIO_ENDPOINT;
+    const model = lmStudioModel.trim() || DEFAULT_LM_STUDIO_MODEL;
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        temperature,
+        stream: false,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error?.message || data.message || "LM Studio non ha risposto correttamente. Controlla che il server locale sia avviato e che CORS sia abilitato.");
+    }
+    const content = data.choices?.[0]?.message?.content || data.choices?.[0]?.text || "";
+    if (!content) throw new Error("LM Studio ha risposto senza contenuto.");
+    return cleanAiJson(content);
+  };
+
+  const postAiJson = async (url, payload, localConfig) => {
+    if (isLocalAi) return await runLocalLmStudio(localConfig);
+    const response = await fetch(url, {
+      method: "POST",
+      headers: apiHeaders(),
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Errore server");
+    return data;
   };
 
   const readFile = async (f) => {
@@ -1649,14 +1791,12 @@ export default function App() {
     setLoading(true); setError(""); setElements(null); setAnalysis(null); setCharacterSheets(null); setBreakdown(null); setLocationSheets(null);
     try {
       setLoadingMsg(mode === "conservative" ? "Parsing conservativo in corso..." : "Formattazione creativa in corso...");
-      const response = await fetch(API_FORMAT, {
-        method: "POST",
-        headers: apiHeaders(),
-        body: JSON.stringify({ text: rawText, mode }),
+      const data = await postAiJson(API_FORMAT, { text: rawText, mode }, {
+        system: LOCAL_FORMAT_PROMPTS[mode] || LOCAL_FORMAT_PROMPTS.creative,
+        user: `${mode === "conservative" ? "Classifica in modo conservativo" : "Analizza e formatta"} il seguente testo come sceneggiatura cinematografica professionale:\n\n${rawText}`,
+        temperature: mode === "conservative" ? 0 : 0.2,
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Errore server");
-      setElements(data.elements);
+      setElements(isLocalAi ? data : data.elements);
       setActiveTab("preview");
     } catch (e) {
       setError("Errore: " + e.message);
@@ -1669,14 +1809,12 @@ export default function App() {
     if (!elements) return;
     setAnalyzing(true); setError("");
     try {
-      const response = await fetch(API_ANALYZE, {
-        method: "POST",
-        headers: apiHeaders(),
-        body: JSON.stringify({ elements }),
+      const data = await postAiJson(API_ANALYZE, { elements }, {
+        system: LOCAL_ANALYSIS_PROMPTS.analyze,
+        user: `Analizza questa sceneggiatura in formato JSON:\n\n${JSON.stringify(elements)}`,
+        temperature: 0.2,
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Errore server");
-      setAnalysis(data.analysis);
+      setAnalysis(isLocalAi ? data : data.analysis);
       setActiveTab("analisi");
       setAnalyTab("struttura");
     } catch (e) {
@@ -1690,14 +1828,12 @@ export default function App() {
     if (!elements) return;
     setLoadingSheets(true); setError("");
     try {
-      const response = await fetch(API_CHARACTER_SHEETS, {
-        method: "POST",
-        headers: apiHeaders(),
-        body: JSON.stringify({ elements }),
+      const data = await postAiJson(API_CHARACTER_SHEETS, { elements }, {
+        system: LOCAL_ANALYSIS_PROMPTS.characterSheets,
+        user: `Genera le schede personaggio complete per questa sceneggiatura:\n\n${JSON.stringify(elements)}`,
+        temperature: 0.2,
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Errore server");
-      setCharacterSheets(data.characterSheets);
+      setCharacterSheets(isLocalAi ? data : data.characterSheets);
       setActiveTab("schede");
     } catch (e) {
       setError("Errore schede: " + e.message);
@@ -1710,14 +1846,12 @@ export default function App() {
     if (!elements) return;
     setLoadingLocations(true); setError("");
     try {
-      const response = await fetch(API_LOCATION_SHEETS, {
-        method: "POST",
-        headers: apiHeaders(),
-        body: JSON.stringify({ elements }),
+      const data = await postAiJson(API_LOCATION_SHEETS, { elements }, {
+        system: LOCAL_ANALYSIS_PROMPTS.locationSheets,
+        user: `Genera le schede location complete per questa sceneggiatura:\n\n${JSON.stringify(elements)}`,
+        temperature: 0.2,
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Errore server");
-      setLocationSheets(data.locationSheets);
+      setLocationSheets(isLocalAi ? data : data.locationSheets);
       setActiveTab("locations");
     } catch (e) {
       setError("Errore schede location: " + e.message);
@@ -1730,14 +1864,12 @@ export default function App() {
     if (!elements) return;
     setLoadingBreakdown(true); setError("");
     try {
-      const response = await fetch(API_BREAKDOWN, {
-        method: "POST",
-        headers: apiHeaders(),
-        body: JSON.stringify({ elements }),
+      const data = await postAiJson(API_BREAKDOWN, { elements }, {
+        system: LOCAL_ANALYSIS_PROMPTS.breakdown,
+        user: `Genera il breakdown completo per reparti di questa sceneggiatura:\n\n${JSON.stringify(elements)}`,
+        temperature: 0.2,
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Errore server");
-      setBreakdown(data.breakdown);
+      setBreakdown(isLocalAi ? data : data.breakdown);
       setActiveTab("breakdown");
     } catch (e) {
       setError("Errore breakdown: " + e.message);
@@ -1927,6 +2059,72 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
 
           <div ref={apiKeyBoxRef} style={s.keyBox}>
             <div>
+              <div style={s.label}>Motore AI</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                <button
+                  type="button"
+                  onClick={() => setAiProvider("anthropic")}
+                  style={{
+                    ...s.btnSec,
+                    flex: "initial",
+                    padding: "9px 10px",
+                    background: aiProvider === "anthropic" ? "rgba(200,169,110,.18)" : "rgba(255,255,255,.06)",
+                    color: aiProvider === "anthropic" ? "#f0dba8" : "#ccc",
+                    borderColor: aiProvider === "anthropic" ? "rgba(200,169,110,.45)" : "rgba(255,255,255,.12)",
+                  }}
+                >
+                  Anthropic
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAiProvider("lmstudio")}
+                  style={{
+                    ...s.btnSec,
+                    flex: "initial",
+                    padding: "9px 10px",
+                    background: aiProvider === "lmstudio" ? "rgba(79,195,247,.16)" : "rgba(255,255,255,.06)",
+                    color: aiProvider === "lmstudio" ? "#9ee7ff" : "#ccc",
+                    borderColor: aiProvider === "lmstudio" ? "rgba(79,195,247,.4)" : "rgba(255,255,255,.12)",
+                  }}
+                >
+                  LM Studio locale
+                </button>
+              </div>
+            </div>
+
+            {aiProvider === "lmstudio" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div>
+                  <div style={s.label}>Endpoint locale</div>
+                  <input
+                    type="text"
+                    value={lmStudioEndpoint}
+                    onChange={(e) => setLmStudioEndpoint(e.target.value)}
+                    placeholder={DEFAULT_LM_STUDIO_ENDPOINT}
+                    spellCheck={false}
+                    style={s.keyInput}
+                  />
+                </div>
+                <div>
+                  <div style={s.label}>Modello</div>
+                  <input
+                    type="text"
+                    value={lmStudioModel}
+                    onChange={(e) => setLmStudioModel(e.target.value)}
+                    placeholder={DEFAULT_LM_STUDIO_MODEL}
+                    spellCheck={false}
+                    style={s.keyInput}
+                  />
+                </div>
+                <div style={{ color: "#777", fontFamily: "sans-serif", fontSize: "11px", lineHeight: "1.5" }}>
+                  Avvia LM Studio in locale, carica il modello e abilita il server OpenAI-compatible. La chiamata parte dal browser, non da Cloudflare.
+                </div>
+              </div>
+            )}
+
+            {aiProvider === "anthropic" && (
+              <>
+            <div>
               <div style={s.label}>API Anthropic personale</div>
               <input
                 type={showApiKey ? "text" : "password"}
@@ -1959,6 +2157,8 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
             <div style={{ color: "#777", fontFamily: "sans-serif", fontSize: "11px", lineHeight: "1.5" }}>
               Se lasci vuoto questo campo, l'app userà la chiave configurata sul Worker, se presente.
             </div>
+              </>
+            )}
           </div>
 
           <div ref={rawTextBoxRef}>
