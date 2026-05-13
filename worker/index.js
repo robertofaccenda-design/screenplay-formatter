@@ -398,7 +398,7 @@ const missingApiKeyResponse = () => jsonResponse({
 
 const countMatches = (text, pattern) => (text.match(pattern) || []).length;
 
-const validateScreenplayInput = (text) => {
+const validateScreenplayInput = (text, mode = "creative") => {
   const normalized = text.replace(/\r/g, "\n").trim();
   const lower = normalized.toLowerCase();
   const lines = normalized
@@ -452,6 +452,10 @@ const validateScreenplayInput = (text) => {
     return {
       error: "Il documento sembra un bando o un testo amministrativo, non una sceneggiatura. Carica o incolla solo scene, dialoghi o testi narrativi in forma di sceneggiatura.",
     };
+  }
+
+  if (mode === "creative") {
+    return { ok: true };
   }
 
   if (screenplayScore < MIN_SCREENPLAY_SCORE) {
@@ -551,7 +555,7 @@ const handleFormat = async (request, env) => {
       return jsonResponse({ error: "Testo troppo lungo. Riduci il contenuto e riprova." }, 413);
     }
 
-    const screenplayValidation = validateScreenplayInput(text);
+    const screenplayValidation = validateScreenplayInput(text, mode);
     if (screenplayValidation.error) {
       return jsonResponse({ error: screenplayValidation.error }, 422);
     }
