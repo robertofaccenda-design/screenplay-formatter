@@ -52,6 +52,16 @@ interface StoryGenerationResult {
   choices: string[];
 }
 
+const cleanStoryText = (text: string): string => text
+  .replace(/```json\s*$/i, '')
+  .replace(/```\s*$/i, '')
+  .replace(/(?:^|\n)\s*-{3,}\s*(?:\n\s*)?(?:#{1,6}\s*)?(?:\*\*)?\s*(?:scelte|scelte\s*[-:]\s*matrice\s*json|matrice\s*json)(?:\*\*)?\s*:?\s*$/i, '')
+  .replace(/(?:^|\n)\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(?:ecco le\s+)?scelte(?:\s*[-:]\s*matrice\s*json)?(?:\*\*)?\s*:?\s*$/i, '')
+  .replace(/(?:^|\n)\s*(?:#{1,6}\s*)?(?:\*\*)?\s*matrice\s*json(?:\*\*)?\s*:?\s*$/i, '')
+  .replace(/json\s*scelte_avventura\s*$/i, '')
+  .replace(/json\s*:?\s*$/i, '')
+  .trim();
+
 /**
  * Parses the AI response to extract the story text and the choices array.
  * This version is more robust against malformed JSON and model output variations.
@@ -83,15 +93,7 @@ const parseStoryResponse = (responseText: string, act: number): StoryGenerationR
     throw new Error("Formato della risposta non valido: non è stata trovata alcuna matrice di scelte.");
   }
 
-  let storyText = responseText.substring(0, jsonStartIndex).trim();
-  // Rimuove etichette testuali indesiderate, markdown e altre frasi non narrative
-  // che l'IA potrebbe anteporre alla matrice JSON, applicando pulizie successive.
-  storyText = storyText.replace(/```json\s*$/i, '').trim()
-    .replace(/```\s*$/i, '').trim()
-    .replace(/ecco le scelte\s*:?\s*$/i, '').trim()
-    .replace(/scelte\s*:?\s*$/i, '').trim()
-    .replace(/json\s*scelte_avventura\s*$/i, '').trim()
-    .replace(/json\s*:?\s*$/i, '').trim();
+  const storyText = cleanStoryText(responseText.substring(0, jsonStartIndex));
 
   try {
     const parsedChoices = JSON.parse(choicesJson);

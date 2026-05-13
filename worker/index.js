@@ -396,6 +396,16 @@ const missingApiKeyResponse = () => jsonResponse({
   error: "Per usare le funzioni AI serve una chiave Anthropic. Inserisci la tua chiave personale nel campo dedicato e riprova. Se stai gestendo tu l'app, puoi anche configurare una chiave predefinita sul Worker.",
 }, 502);
 
+const cleanStoryText = (text) => text
+  .replace(/```json\s*$/i, "")
+  .replace(/```\s*$/i, "")
+  .replace(/(?:^|\n)\s*-{3,}\s*(?:\n\s*)?(?:#{1,6}\s*)?(?:\*\*)?\s*(?:scelte|scelte\s*[-:]\s*matrice\s*json|matrice\s*json)(?:\*\*)?\s*:?\s*$/i, "")
+  .replace(/(?:^|\n)\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(?:ecco le\s+)?scelte(?:\s*[-:]\s*matrice\s*json)?(?:\*\*)?\s*:?\s*$/i, "")
+  .replace(/(?:^|\n)\s*(?:#{1,6}\s*)?(?:\*\*)?\s*matrice\s*json(?:\*\*)?\s*:?\s*$/i, "")
+  .replace(/json\s*scelte_avventura\s*$/i, "")
+  .replace(/json\s*:?\s*$/i, "")
+  .trim();
+
 const parseStoryResponse = (responseText, act) => {
   const fencedJsonMatch = responseText.match(/```json\s*([\s\S]*?)```/i);
   const objectStartIndex = responseText.lastIndexOf("{");
@@ -422,13 +432,7 @@ const parseStoryResponse = (responseText, act) => {
     throw new Error("Formato della risposta non valido: non è stata trovata la matrice delle scelte.");
   }
 
-  const storyText = responseText
-    .slice(0, jsonStartIndex)
-    .replace(/```json\s*$/i, "")
-    .replace(/```\s*$/i, "")
-    .replace(/(?:ecco le )?scelte\s*:?\s*$/i, "")
-    .replace(/json\s*:?\s*$/i, "")
-    .trim();
+  const storyText = cleanStoryText(responseText.slice(0, jsonStartIndex));
 
   const parsedChoices = JSON.parse(jsonrepair(choicesJson));
   const choicesData = Array.isArray(parsedChoices)
