@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Generatore di Storie Interattive</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.19.0"
+  }
+}
+</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
+    <style>
+      :root {
+        --color-brand-bg: #FDFBF6;
+        --color-brand-text: #3C3633;
+        --color-brand-primary: #7A6B5D;
+        --color-brand-secondary: #E0D8B0;
+        --color-brand-accent: #AD8B73;
+      }
+      @keyframes gradientAnimation {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+      .initial-screen-bg {
+        background: linear-gradient(-45deg, #e0d8b0, #ad8b73, #fdfbf6, #7a6b5d);
+        background-size: 400% 400%;
+        animation: gradientAnimation 20s ease infinite;
+        transition: background 0.5s ease-in-out;
+      }
+      /* General transition for background color changes */
+      body {
+        transition: background-color 0.3s ease-in-out, color 0.3s ease-in-out;
+      }
+      /* Animation for components fading in */
+      @keyframes fade-in-up {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .animate-fade-in-up {
+        animation: fade-in-up 0.5s ease-out forwards;
+      }
+    </style>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              'serif': ['Merriweather', 'serif'],
+              'sans': ['Roboto', 'sans-serif'],
+            },
+            colors: {
+              'brand-bg': 'var(--color-brand-bg)',
+              'brand-text': 'var(--color-brand-text)',
+              'brand-primary': 'var(--color-brand-primary)',
+              'brand-secondary': 'var(--color-brand-secondary)',
+              'brand-accent': 'var(--color-brand-accent)',
+            },
+          }
+        }
+      }
+    </script>
+</head>
+  <body class="bg-brand-bg text-brand-text font-sans">
+    <div id="root"></div>
+    <audio id="background-music" loop>
+      <source src="https://cdn.pixabay.com/download/audio/2022/10/18/audio_b2a76f309a.mp3" type="audio/mpeg">
+      Il tuo browser non supporta l'elemento audio.
+    </audio>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

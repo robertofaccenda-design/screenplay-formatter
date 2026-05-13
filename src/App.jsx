@@ -2286,6 +2286,10 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
     app:        { minHeight: "100vh", background: "linear-gradient(135deg,#0a0a0f,#111118,#0d0d15)", color: "#e8e8f0", fontFamily: "Georgia,serif", display: "flex", flexDirection: "column" },
     header:     { padding: "28px 40px 20px", borderBottom: "1px solid rgba(255,255,255,.08)", display: "flex", alignItems: "center", gap: "16px" },
     logo:       { width: "36px", height: "36px", background: "linear-gradient(135deg,#c8a96e,#e8c98e)", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px", flexShrink: 0 },
+    headerActions: { marginLeft: "auto", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" },
+    storyLink:  { background: "rgba(78,195,247,.12)", color: "#9adfff", border: "1px solid rgba(78,195,247,.35)", borderRadius: "8px", padding: "10px 14px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", fontFamily: "sans-serif", textDecoration: "none", whiteSpace: "nowrap" },
+    homeActions: { display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center", marginTop: "8px" },
+    homeStoryLink: { background: "linear-gradient(135deg,#4FC3F7,#0277BD)", color: "#fff", border: "1px solid rgba(79,195,247,.5)", borderRadius: "8px", padding: "12px 18px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", fontFamily: "sans-serif", textDecoration: "none", boxShadow: "0 12px 30px rgba(2,119,189,.2)" },
     main:       { display: "flex", flex: 1, overflow: "hidden" },
     sidebar:    { width: "340px", flexShrink: 0, padding: "24px", borderRight: "1px solid rgba(255,255,255,.06)", display: "flex", flexDirection: "column", gap: "18px", overflowY: "auto" },
     dropzone:   { border: `2px dashed ${dragOver ? "#c8a96e" : "rgba(200,169,110,.3)"}`, borderRadius: "10px", padding: "28px 20px", textAlign: "center", cursor: "pointer", transition: "all .2s", background: dragOver ? "rgba(200,169,110,.05)" : "rgba(255,255,255,.02)" },
@@ -2337,9 +2341,14 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
           <div style={{ fontSize: "20px", fontWeight: "bold", letterSpacing: ".5px", color: "#f0ead8" }}>DeepFrame Script</div>
           <div style={{ fontSize: "12px", color: "#888", marginTop: "2px", fontFamily: "sans-serif", letterSpacing: "1px", textTransform: "uppercase" }}>Beyond Screenwriting · Script · Analisi · Produzione</div>
         </div>
-        <button ref={onboardingButtonRef} type="button" onClick={openOnboarding} style={{ marginLeft: "auto", background: "rgba(255,255,255,.06)", color: "#ccc", border: "1px solid rgba(255,255,255,.12)", borderRadius: "7px", padding: "8px 12px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", fontFamily: "sans-serif" }}>
-          Onboarding
-        </button>
+        <div style={s.headerActions}>
+          <a href="/crea-la-tua-storia/" style={s.storyLink}>
+            Crea la tua storia
+          </a>
+          <button ref={onboardingButtonRef} type="button" onClick={openOnboarding} style={{ background: "rgba(255,255,255,.06)", color: "#ccc", border: "1px solid rgba(255,255,255,.12)", borderRadius: "7px", padding: "8px 12px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", fontFamily: "sans-serif" }}>
+            Onboarding
+          </button>
+        </div>
       </div>
 
       <div style={s.main}>
@@ -2620,6 +2629,11 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
                 <div style={{ fontSize: "48px" }}>🎞️</div>
                 <div style={{ fontSize: "16px", color: "#555" }}>Carica un file e avvia la formattazione</div>
                 <div style={{ fontSize: "13px", color: "#444", maxWidth: "340px", textAlign: "center", lineHeight: "1.6" }}>Dopo la formattazione potrai avviare l'analisi drammaturgica completa: struttura, personaggi, segnalazioni, valutazione.</div>
+                <div style={s.homeActions}>
+                  <a href="/crea-la-tua-storia/" style={s.homeStoryLink}>
+                    Crea la tua storia
+                  </a>
+                </div>
               </div>
             )}
 

@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run build:main && npm run build:story",
+    "build:main": "vite build",
+    "build:story": "vite build --config genera-la-tua-idea-rome-future-week-2025/vite.config.ts",
     "lint": "eslint .",
     "preview": "vite preview",
     "cf:dev": "npm run build && npx wrangler dev",
