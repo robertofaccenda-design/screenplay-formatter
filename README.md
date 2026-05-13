@@ -43,6 +43,7 @@ Moduli previsti:
 - Genera schede personaggio
 - Genera schede location
 - Genera breakdown per reparti di produzione
+- Integra Lumina Studio in una scheda **Luci 3D** per simulazioni di setup luce
 
 ## Funzioni AI
 
@@ -129,6 +130,14 @@ Endpoint:
 
 ```text
 /api/breakdown
+```
+
+### Luci 3D
+
+Integra Lumina Studio come modulo esterno visualizzabile dentro l'app per simulare setup luci 3D:
+
+```text
+https://lumina-studio-1033723633880.us-west1.run.app/
 ```
 
 ## Stack Tecnico
