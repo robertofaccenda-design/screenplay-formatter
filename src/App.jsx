@@ -9,6 +9,7 @@ const API_BREAKDOWN        = "/api/breakdown";
 const API_LOCATION_SHEETS  = "/api/location-sheets";
 const LUMINA_STUDIO_URL    = "https://lumina-studio-1033723633880.us-west1.run.app/";
 const ANTHROPIC_KEY_STORAGE = "screenplayFormatter.anthropicApiKey";
+const ANTHROPIC_SESSION_KEY_STORAGE = "screenplayFormatter.anthropicApiKey.session";
 const AI_PROVIDER_STORAGE = "screenplayFormatter.aiProvider";
 const LM_STUDIO_ENDPOINT_STORAGE = "screenplayFormatter.lmStudioEndpoint";
 const LM_STUDIO_MODEL_STORAGE = "screenplayFormatter.lmStudioModel";
@@ -1954,8 +1955,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const trimmedKey = anthropicApiKey.trim();
+    if (trimmedKey) {
+      window.sessionStorage.setItem(ANTHROPIC_SESSION_KEY_STORAGE, trimmedKey);
+    } else {
+      window.sessionStorage.removeItem(ANTHROPIC_SESSION_KEY_STORAGE);
+    }
+
     if (rememberApiKey && anthropicApiKey.trim()) {
-      window.localStorage.setItem(ANTHROPIC_KEY_STORAGE, anthropicApiKey.trim());
+      window.localStorage.setItem(ANTHROPIC_KEY_STORAGE, trimmedKey);
       return;
     }
     window.localStorage.removeItem(ANTHROPIC_KEY_STORAGE);

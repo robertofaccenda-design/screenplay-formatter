@@ -1,18 +1,9 @@
 
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import type { Character } from '../types';
 
-const apiKey = process.env.API_KEY;
-const getAiClient = () => {
-  if (!apiKey) {
-    throw new Error("Chiave Gemini non configurata. Imposta GEMINI_API_KEY per usare il generatore di storie.");
-  }
-
-  return new GoogleGenAI({ apiKey });
-};
-
-const textModel = 'gemini-2.5-flash';
-const imageModel = 'imagen-4.0-generate-001';
+const API_STORY = '/api/story';
+const ANTHROPIC_KEY_STORAGE = 'screenplayFormatter.anthropicApiKey';
+const ANTHROPIC_SESSION_KEY_STORAGE = 'screenplayFormatter.anthropicApiKey.session';
 
 const getActSystemInstruction = (act: number, narrativeStructure: string, narrativeTone: string): string => {
   let baseInstruction = `Sei un narratore educativo e creativo per studenti di scuola media (11-14 anni). Le tue storie sono coinvolgenti e inseriscono in modo sottile fatti educativi. Il tuo tono è ${narrativeTone}, incoraggiante e stimolante. Mantieni la coerenza con i personaggi principali definiti nel prompt e assicurati di coinvolgerli attivamente nella narrazione, non solo il protagonista. La parte della storia dovrebbe essere di circa 150 parole.`;
@@ -134,8 +125,6 @@ const parseStoryResponse = (responseText: string, act: number): StoryGenerationR
  * Generates the next part of the story.
  */
 export const generateStoryPart = async (prompt: string, storyHistory: string, act: number, narrativeStructure: string, characters: Character[], narrativeTone: string): Promise<StoryGenerationResult> => {
-  const ai = getAiClient();
-  
   const characterDescriptions = characters
       .map(c => `- ${c.name} (Ruolo: ${c.role}): ${c.description}`)
       .join('\n');
@@ -144,21 +133,45 @@ export const generateStoryPart = async (prompt: string, storyHistory: string, ac
     ? `Ecco il riassunto della storia finora:\n"${storyHistory}"\n\nL'utente ha scelto di continuare con: "${prompt}"\n\nQuesti sono i personaggi principali della storia. Assicurati di includerli e farli interagire, non concentrarti solo sul protagonista:\n${characterDescriptions}\n\nOra, scrivi ESCLUSIVAMENTE il paragrafo successivo della storia. Non riassumere nulla. Comincia direttamente con la nuova narrazione.`
     : `Inizia una storia basata su queste indicazioni: ${prompt}. La storia deve essere educativa per studenti di scuola media e seguire la struttura narrativa scelta.`;
 
+  const systemInstruction = getActSystemInstruction(act, narrativeStructure, narrativeTone);
+  const savedApiKey = sessionStorage.getItem(ANTHROPIC_SESSION_KEY_STORAGE)
+    || localStorage.getItem(ANTHROPIC_KEY_STORAGE)
+    || '';
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (savedApiKey.trim()) {
+    headers['X-Anthropic-API-Key'] = savedApiKey.trim();
+  }
+
   try {
-    const systemInstruction = getActSystemInstruction(act, narrativeStructure, narrativeTone);
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: textModel,
-      contents: fullPrompt,
-      config: {
-        systemInstruction: systemInstruction,
-      }
+    const response = await fetch(API_STORY, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        prompt: fullPrompt,
+        systemInstruction,
+        act,
+      }),
     });
-    
-    const responseText = response.text;
-    return parseStoryResponse(responseText, act);
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Si è verificato un errore durante la generazione della storia.");
+    }
+
+    if (typeof data.storyText === 'string' && Array.isArray(data.choices)) {
+      return { storyText: data.storyText, choices: data.choices };
+    }
+
+    if (typeof data.text === 'string') {
+      return parseStoryResponse(data.text, act);
+    }
+
+    throw new Error("Risposta non valida durante la generazione della storia.");
   } catch (error) {
-    console.error("Errore API Gemini (testo):", error);
-    throw new Error("Si è verificato un errore durante la generazione della storia. Riprova.");
+    console.error("Errore API storia:", error);
+    throw error instanceof Error
+      ? error
+      : new Error("Si è verificato un errore durante la generazione della storia. Riprova.");
   }
 };
 
@@ -166,30 +179,6 @@ export const generateStoryPart = async (prompt: string, storyHistory: string, ac
  * Generates an image for a given story part.
  */
 export const generateStoryImage = async (storyText: string): Promise<string | null> => {
-  const ai = getAiClient();
-  const prompt = `Illustrazione evocativa in stile libro di fiabe digitale, minimalista e pulita, che raffigura questa scena: "${storyText}". L'immagine deve essere puramente visiva, senza alcun testo, scritta, lettera o numero sovrimpresso.`;
-
-  try {
-    const response = await ai.models.generateImages({
-        model: imageModel,
-        prompt: prompt,
-        config: {
-          numberOfImages: 1,
-          outputMimeType: 'image/jpeg',
-          aspectRatio: '16:9',
-        },
-    });
-
-    if (response.generatedImages && response.generatedImages.length > 0 && response.generatedImages[0].image?.imageBytes) {
-      const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
-      return `data:image/jpeg;base64,${base64ImageBytes}`;
-    }
-
-    console.warn("Nessuna immagine generata. Potrebbe essere dovuto a filtri di sicurezza.", { response });
-    return null;
-  } catch (error) {
-    console.error("Errore API Gemini (immagine):", error);
-    // Restituisce null per consentire alla storia di continuare senza un'immagine
-    return null;
-  }
+  void storyText;
+  return null;
 };

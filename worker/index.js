@@ -396,6 +396,40 @@ const missingApiKeyResponse = () => jsonResponse({
   error: "Per usare le funzioni AI serve una chiave Anthropic. Inserisci la tua chiave personale nel campo dedicato e riprova. Se stai gestendo tu l'app, puoi anche configurare una chiave predefinita sul Worker.",
 }, 502);
 
+const parseStoryResponse = (responseText, act) => {
+  const jsonStartIndex = responseText.lastIndexOf("[");
+  const jsonEndIndex = responseText.lastIndexOf("]");
+  if (jsonStartIndex === -1 || jsonEndIndex === -1 || jsonEndIndex < jsonStartIndex) {
+    throw new Error("Formato della risposta non valido: non è stata trovata la matrice delle scelte.");
+  }
+
+  const storyText = responseText
+    .slice(0, jsonStartIndex)
+    .replace(/```json\s*$/i, "")
+    .replace(/```\s*$/i, "")
+    .replace(/(?:ecco le )?scelte\s*:?\s*$/i, "")
+    .replace(/json\s*:?\s*$/i, "")
+    .trim();
+
+  const choicesData = JSON.parse(jsonrepair(responseText.slice(jsonStartIndex, jsonEndIndex + 1)));
+  if (!Array.isArray(choicesData) || (choicesData.length === 0 && act < 5)) {
+    throw new Error("Le scelte non sono valide o sono vuote prima dell'atto finale.");
+  }
+
+  const choices = choicesData.map((choice) => {
+    if (typeof choice === "string") return choice;
+    if (choice && typeof choice === "object") {
+      if (typeof choice.text === "string") return choice.text;
+      if (typeof choice.descrizione === "string") return choice.descrizione;
+      const firstStringValue = Object.values(choice).find((value) => typeof value === "string");
+      if (firstStringValue) return firstStringValue;
+    }
+    return null;
+  }).filter(Boolean);
+
+  return { storyText, choices };
+};
+
 const countMatches = (text, pattern) => (text.match(pattern) || []).length;
 
 const validateScreenplayInput = (text, mode = "creative") => {
@@ -887,6 +921,71 @@ const handleLocationSheets = async (request, env) => {
   }
 };
 
+const handleStory = async (request, env) => {
+  if (request.method === "OPTIONS") {
+    return new Response("", { status: 200, headers: jsonHeaders });
+  }
+
+  if (request.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed" }, 405);
+  }
+
+  try {
+    const rawBody = await request.text();
+    const parsedBody = safeJsonParse(rawBody || "{}");
+    const prompt = typeof parsedBody?.prompt === "string" ? parsedBody.prompt : "";
+    const systemInstruction = typeof parsedBody?.systemInstruction === "string" ? parsedBody.systemInstruction : "";
+    const act = Number.isFinite(Number(parsedBody?.act)) ? Number(parsedBody.act) : 1;
+
+    if (!prompt.trim() || !systemInstruction.trim()) {
+      return jsonResponse({ error: "Dati storia mancanti o non validi." }, 400);
+    }
+
+    const apiKey = getAnthropicApiKey(request, env);
+    if (!apiKey) {
+      return missingApiKeyResponse();
+    }
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 2200,
+        temperature: 0.7,
+        system: systemInstruction,
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+      }),
+    });
+
+    const rawResponseBody = await response.text();
+    const data = safeJsonParse(rawResponseBody);
+
+    if (!response.ok) {
+      return jsonResponse({ error: extractAnthropicError(data, response.status) }, 500);
+    }
+
+    const text = data?.content?.find((block) => block.type === "text")?.text || "";
+    if (!text) {
+      return jsonResponse({ error: "Risposta vuota dal provider AI." }, 502);
+    }
+
+    const story = parseStoryResponse(text, act);
+    return jsonResponse(story);
+  } catch (err) {
+    return jsonResponse({ error: `Errore interno: ${err.message}` }, 500);
+  }
+};
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -909,6 +1008,10 @@ export default {
 
     if (url.pathname === "/api/location-sheets") {
       return handleLocationSheets(request, env);
+    }
+
+    if (url.pathname === "/api/story") {
+      return handleStory(request, env);
     }
 
     if (env.ASSETS) {
