@@ -62,23 +62,84 @@ Restituisci SOLO l'array JSON, senza markdown, senza spiegazioni.`,
 };
 
 const LOCAL_ANALYSIS_PROMPTS = {
-  analyze: `Sei un dramaturg e docente di sceneggiatura. Analizza una sceneggiatura in JSON e restituisci ESCLUSIVAMENTE un oggetto JSON valido con questi campi:
+  analyze: `Sei un dramaturg e docente di sceneggiatura cinematografica. Devi analizzare una sceneggiatura gia trasformata in array JSON di elementi tipizzati.
+
+ISTRUZIONI IMPORTANTI:
+- Non restituire campi vuoti se il testo contiene scene, personaggi o dialoghi.
+- Compila sempre 3 atti, anche per testi brevi.
+- Compila sempre i momenti chiave usando null quando non sono identificabili.
+- Compila sempre analisi_scene con una voce per ogni scene_heading.
+- Compila personaggi usando gli elementi "character" e "dialogue".
+- Le segnalazioni possono essere vuote solo se non trovi problemi reali.
+- I punteggi devono essere numeri da 1 a 10, mai 0.
+- Restituisci ESCLUSIVAMENTE l'oggetto JSON, senza wrapper "analysis", senza markdown e senza spiegazioni.
+
+SCHEMA ESATTO:
 {
-  "struttura": { "totale_scene": 0, "atti": [], "momenti_chiave": [] },
-  "personaggi": [],
-  "analisi_scene": [],
-  "segnalazioni": [],
+  "struttura": {
+    "totale_scene": 0,
+    "atti": [
+      {
+        "atto": 1,
+        "scene_da": 1,
+        "scene_a": 1,
+        "percentuale": "33%",
+        "funzione_narrativa": "",
+        "valutazione": "efficace",
+        "note_docente": ""
+      }
+    ],
+    "momenti_chiave": [
+      {
+        "tipo": "inciting_incident",
+        "scena_numero": null,
+        "descrizione": "",
+        "valutazione": "assente",
+        "nota_docente": ""
+      }
+    ]
+  },
+  "personaggi": [
+    {
+      "nome": "",
+      "battute": 0,
+      "arco": "assente",
+      "analisi_arco": "",
+      "tipi_conflitto": [],
+      "presenza_scene": 0,
+      "nota_docente": ""
+    }
+  ],
+  "analisi_scene": [
+    {
+      "numero": 1,
+      "titolo": "",
+      "conflitto": "medio",
+      "funzione": "esposizione",
+      "problemi": [],
+      "nota": ""
+    }
+  ],
+  "segnalazioni": [
+    {
+      "tipo": "conflitto_assente",
+      "gravita": "media",
+      "scena_numero": null,
+      "elemento": "",
+      "spiegazione": "",
+      "suggerimento": ""
+    }
+  ],
   "valutazione_globale": {
-    "punteggio_struttura": 0,
-    "punteggio_personaggi": 0,
-    "punteggio_dialoghi": 0,
-    "punteggio_ritmo": 0,
+    "punteggio_struttura": 6,
+    "punteggio_personaggi": 6,
+    "punteggio_dialoghi": 6,
+    "punteggio_ritmo": 6,
     "punti_di_forza": [],
     "aree_di_miglioramento": [],
     "commento_docente": ""
   }
-}
-Usa dati deducibili dalla sceneggiatura. Restituisci SOLO JSON.`,
+}`,
   characterSheets: `Sei un dramaturg e script analyst. Genera schede personaggio da una sceneggiatura JSON e restituisci ESCLUSIVAMENTE:
 { "personaggi": [], "mappa_relazioni": [], "note_ensemble": "" }
 Per ogni personaggio includi, quando deducibile: nome, ruolo, presenza, profilo_narrativo, relazioni, conflitti, scheda_produzione, scheda_didattica. Non inventare: usa "non specificato". Restituisci SOLO JSON.`,
@@ -111,6 +172,10 @@ const cleanAiJson = (value) => {
   if (end < start) throw new Error("La risposta del modello locale non contiene JSON completo.");
   return JSON.parse(jsonrepair(text.slice(start, end + 1)));
 };
+
+const unwrapLocalPayload = (payload, key) => (
+  payload && typeof payload === "object" && key in payload ? payload[key] : payload
+);
 
 // ─── Colori e icone per l'analisi ───────────────────────────────────────────
 const valColors  = { efficace: "#A5D6A7", debole: "#FFD54F", assente: "#FF8A65" };
@@ -1811,7 +1876,7 @@ export default function App() {
         user: `${mode === "conservative" ? "Classifica in modo conservativo" : "Analizza e formatta"} il seguente testo come sceneggiatura cinematografica professionale:\n\n${rawText}`,
         temperature: mode === "conservative" ? 0 : 0.2,
       });
-      setElements(isLocalAi ? data : data.elements);
+      setElements(isLocalAi ? unwrapLocalPayload(data, "elements") : data.elements);
       setActiveTab("preview");
     } catch (e) {
       setError("Errore: " + e.message);
@@ -1826,10 +1891,10 @@ export default function App() {
     try {
       const data = await postAiJson(API_ANALYZE, { elements }, {
         system: LOCAL_ANALYSIS_PROMPTS.analyze,
-        user: `Analizza questa sceneggiatura in formato JSON:\n\n${JSON.stringify(elements)}`,
+        user: `Analizza questa sceneggiatura in formato JSON. Il risultato deve popolare la dashboard, quindi non lasciare vuoti struttura.atti, analisi_scene, personaggi o valutazione_globale se nel testo ci sono dati disponibili:\n\n${JSON.stringify(elements)}`,
         temperature: 0.2,
       });
-      setAnalysis(isLocalAi ? data : data.analysis);
+      setAnalysis(isLocalAi ? unwrapLocalPayload(data, "analysis") : data.analysis);
       setActiveTab("analisi");
       setAnalyTab("struttura");
     } catch (e) {
@@ -1848,7 +1913,7 @@ export default function App() {
         user: `Genera le schede personaggio complete per questa sceneggiatura:\n\n${JSON.stringify(elements)}`,
         temperature: 0.2,
       });
-      setCharacterSheets(isLocalAi ? data : data.characterSheets);
+      setCharacterSheets(isLocalAi ? unwrapLocalPayload(data, "characterSheets") : data.characterSheets);
       setActiveTab("schede");
     } catch (e) {
       setError("Errore schede: " + e.message);
@@ -1866,7 +1931,7 @@ export default function App() {
         user: `Genera le schede location complete per questa sceneggiatura:\n\n${JSON.stringify(elements)}`,
         temperature: 0.2,
       });
-      setLocationSheets(isLocalAi ? data : data.locationSheets);
+      setLocationSheets(isLocalAi ? unwrapLocalPayload(data, "locationSheets") : data.locationSheets);
       setActiveTab("locations");
     } catch (e) {
       setError("Errore schede location: " + e.message);
@@ -1884,7 +1949,7 @@ export default function App() {
         user: `Genera il breakdown completo per reparti di questa sceneggiatura:\n\n${JSON.stringify(elements)}`,
         temperature: 0.2,
       });
-      setBreakdown(isLocalAi ? data : data.breakdown);
+      setBreakdown(isLocalAi ? unwrapLocalPayload(data, "breakdown") : data.breakdown);
       setActiveTab("breakdown");
     } catch (e) {
       setError("Errore breakdown: " + e.message);
