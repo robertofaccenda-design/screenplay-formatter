@@ -1985,31 +1985,42 @@ export default function App() {
   const runLocalLmStudio = async ({ system, user, temperature = 0.1, output = "object" }) => {
     const endpoint = lmStudioEndpoint.trim() || DEFAULT_LM_STUDIO_ENDPOINT;
     const model = lmStudioModel.trim() || DEFAULT_LM_STUDIO_MODEL;
-    const buildBody = (messages, temp = temperature) => ({
+    const buildBody = (messages, temp = temperature, useJsonMode = true) => ({
       model,
       messages,
       temperature: temp,
       stream: false,
-      ...(output === "object" ? { response_format: { type: "json_object" } } : {}),
+      ...(useJsonMode && output === "object" ? { response_format: { type: "json_object" } } : {}),
     });
-    let response;
-    try {
-      response = await fetch(endpoint, {
+    const sendRequest = async (messages, temp = temperature, useJsonMode = true) => {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildBody([
-            { role: "system", content: system },
-            { role: "user", content: user },
-          ])),
+        body: JSON.stringify(buildBody(messages, temp, useJsonMode)),
       });
+      const payload = await res.json().catch(() => ({}));
+      return { res, payload };
+    };
+    let response;
+    let data;
+    try {
+      ({ res: response, payload: data } = await sendRequest([
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ], temperature, true));
+      if (!response.ok && output === "object") {
+        ({ res: response, payload: data } = await sendRequest([
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ], temperature, false));
+      }
     } catch {
       throw new Error(
         "Non riesco a raggiungere LM Studio. Avvia il server locale OpenAI-compatible, controlla la porta 1234 e, se usi il sito pubblicato, abilita CORS in LM Studio."
       );
     }
-    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error?.message || data.message || "LM Studio non ha risposto correttamente. Controlla che il server locale sia avviato e che CORS sia abilitato.");
+      throw new Error(data.error?.message || data.message || "LM Studio ha rifiutato la richiesta. Controlla che il modello sia caricato e prova a ridurre la lunghezza del testo.");
     }
     const content = extractLmStudioContent(data);
     if (!content) throw new Error("LM Studio ha risposto senza contenuto.");
@@ -2019,10 +2030,7 @@ export default function App() {
       if (output === "array") {
         throw new Error(`LM Studio ha generato JSON non valido: ${parseError.message}`);
       }
-      const repairResponse = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildBody([
+      const { res: repairResponse, payload: repairData } = await sendRequest([
           {
             role: "system",
             content: "Sei un validatore JSON. Correggi la sintassi del testo ricevuto e restituisci SOLO un oggetto JSON valido, senza markdown e senza spiegazioni. Non aggiungere nuove informazioni: ripara solo virgolette, virgole, due punti, parentesi e wrapper.",
@@ -2031,9 +2039,7 @@ export default function App() {
             role: "user",
             content: `Errore parser: ${parseError.message}\n\nJSON da riparare:\n${content}`,
           },
-        ], 0)),
-      });
-      const repairData = await repairResponse.json().catch(() => ({}));
+        ], 0, false);
       if (!repairResponse.ok) {
         throw new Error(`LM Studio ha generato JSON non valido e la riparazione automatica non e riuscita: ${parseError.message}`);
       }
