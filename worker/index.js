@@ -397,9 +397,28 @@ const missingApiKeyResponse = () => jsonResponse({
 }, 502);
 
 const parseStoryResponse = (responseText, act) => {
-  const jsonStartIndex = responseText.lastIndexOf("[");
-  const jsonEndIndex = responseText.lastIndexOf("]");
-  if (jsonStartIndex === -1 || jsonEndIndex === -1 || jsonEndIndex < jsonStartIndex) {
+  const fencedJsonMatch = responseText.match(/```json\s*([\s\S]*?)```/i);
+  const objectStartIndex = responseText.lastIndexOf("{");
+  const objectEndIndex = responseText.lastIndexOf("}");
+  const arrayStartIndex = responseText.lastIndexOf("[");
+  const arrayEndIndex = responseText.lastIndexOf("]");
+  const hasChoicesObject = objectStartIndex !== -1
+    && objectEndIndex > objectStartIndex
+    && objectStartIndex < arrayStartIndex
+    && /scelte_critiche|choices|scelte/i.test(responseText.slice(objectStartIndex, objectEndIndex + 1));
+
+  let jsonStartIndex = arrayStartIndex;
+  let choicesJson = "";
+
+  if (fencedJsonMatch?.[1]) {
+    jsonStartIndex = responseText.indexOf(fencedJsonMatch[0]);
+    choicesJson = fencedJsonMatch[1].trim();
+  } else if (hasChoicesObject) {
+    jsonStartIndex = objectStartIndex;
+    choicesJson = responseText.slice(objectStartIndex, objectEndIndex + 1);
+  } else if (arrayStartIndex !== -1 && arrayEndIndex !== -1 && arrayEndIndex > arrayStartIndex) {
+    choicesJson = responseText.slice(arrayStartIndex, arrayEndIndex + 1);
+  } else {
     throw new Error("Formato della risposta non valido: non è stata trovata la matrice delle scelte.");
   }
 
@@ -411,7 +430,10 @@ const parseStoryResponse = (responseText, act) => {
     .replace(/json\s*:?\s*$/i, "")
     .trim();
 
-  const choicesData = JSON.parse(jsonrepair(responseText.slice(jsonStartIndex, jsonEndIndex + 1)));
+  const parsedChoices = JSON.parse(jsonrepair(choicesJson));
+  const choicesData = Array.isArray(parsedChoices)
+    ? parsedChoices
+    : parsedChoices?.scelte_critiche || parsedChoices?.choices || parsedChoices?.scelte;
   if (!Array.isArray(choicesData) || (choicesData.length === 0 && act < 5)) {
     throw new Error("Le scelte non sono valide o sono vuote prima dell'atto finale.");
   }

@@ -57,14 +57,30 @@ interface StoryGenerationResult {
  * This version is more robust against malformed JSON and model output variations.
  */
 const parseStoryResponse = (responseText: string, act: number): StoryGenerationResult => {
-  const jsonStartIndex = responseText.lastIndexOf('[');
-  if (jsonStartIndex === -1) {
-    throw new Error("Formato della risposta non valido: non è stata trovata alcuna matrice di scelte.");
-  }
+  const fencedJsonMatch = responseText.match(/```json\s*([\s\S]*?)```/i);
+  const objectStartIndex = responseText.lastIndexOf('{');
+  const objectEndIndex = responseText.lastIndexOf('}');
+  const arrayStartIndex = responseText.lastIndexOf('[');
+  const arrayEndIndex = responseText.lastIndexOf(']');
+  const hasChoicesObject = objectStartIndex !== -1
+    && objectEndIndex > objectStartIndex
+    && objectStartIndex < arrayStartIndex
+    && /scelte_critiche|choices|scelte/i.test(responseText.slice(objectStartIndex, objectEndIndex + 1));
 
-  const jsonEndIndex = responseText.lastIndexOf(']');
-  if (jsonEndIndex === -1 || jsonEndIndex < jsonStartIndex) {
-    throw new Error("Formato della risposta non valido: la matrice JSON delle scelte è incompleta.");
+  let jsonStartIndex = arrayStartIndex;
+  let choicesJson = '';
+
+  if (fencedJsonMatch?.[1]) {
+    jsonStartIndex = responseText.indexOf(fencedJsonMatch[0]);
+    choicesJson = fencedJsonMatch[1].trim();
+  } else if (hasChoicesObject) {
+    jsonStartIndex = objectStartIndex;
+    choicesJson = responseText.substring(objectStartIndex, objectEndIndex + 1);
+  } else if (arrayStartIndex !== -1 && arrayEndIndex !== -1 && arrayEndIndex > arrayStartIndex) {
+    jsonStartIndex = arrayStartIndex;
+    choicesJson = responseText.substring(arrayStartIndex, arrayEndIndex + 1);
+  } else {
+    throw new Error("Formato della risposta non valido: non è stata trovata alcuna matrice di scelte.");
   }
 
   let storyText = responseText.substring(0, jsonStartIndex).trim();
@@ -77,10 +93,11 @@ const parseStoryResponse = (responseText: string, act: number): StoryGenerationR
     .replace(/json\s*scelte_avventura\s*$/i, '').trim()
     .replace(/json\s*:?\s*$/i, '').trim();
 
-  const choicesJson = responseText.substring(jsonStartIndex, jsonEndIndex + 1);
-
   try {
-    const choicesData = JSON.parse(choicesJson);
+    const parsedChoices = JSON.parse(choicesJson);
+    const choicesData = Array.isArray(parsedChoices)
+      ? parsedChoices
+      : parsedChoices?.scelte_critiche || parsedChoices?.choices || parsedChoices?.scelte;
     if (!Array.isArray(choicesData) || (choicesData.length === 0 && act < 5)) {
       throw new Error("Le scelte non sono una matrice valida o la matrice è vuota prima dell'atto finale.");
     }
