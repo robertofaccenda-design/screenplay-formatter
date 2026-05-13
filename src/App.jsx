@@ -6,6 +6,7 @@ const API_ANALYZE          = "/api/analyze";
 const API_CHARACTER_SHEETS = "/api/character-sheets";
 const API_BREAKDOWN        = "/api/breakdown";
 const API_LOCATION_SHEETS  = "/api/location-sheets";
+const LUMINA_STUDIO_URL    = "https://lumina-studio-1033723633880.us-west1.run.app/";
 const ANTHROPIC_KEY_STORAGE = "screenplayFormatter.anthropicApiKey";
 const ONBOARDING_STORAGE = "screenplayFormatter.onboardingComplete";
 const APP_TOUR_STORAGE = "screenplayFormatter.appTourComplete";
@@ -166,6 +167,33 @@ function ScreenplayPreview({ elements }) {
         if (el.type === "dialogue") return <div key={i} style={{ marginLeft: "100px", marginRight: "100px", marginBottom: "4px" }}>{el.content}</div>;
         return <div key={i}>{el.content}</div>;
       })}
+    </div>
+  );
+}
+
+function LuminaStudioPanel() {
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, background: "#09090b" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,.08)", background: "rgba(0,0,0,.35)" }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: "sans-serif", color: "#f0ead8", fontWeight: "bold", fontSize: "13px" }}>Lumina Studio</div>
+          <div style={{ fontFamily: "sans-serif", color: "#777", fontSize: "11px", marginTop: "2px" }}>Simulazione luci 3D per setup di scena</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => window.open(LUMINA_STUDIO_URL, "_blank", "noopener,noreferrer")}
+          style={{ background: "rgba(255,255,255,.06)", color: "#ccc", border: "1px solid rgba(255,255,255,.12)", borderRadius: "7px", padding: "8px 12px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", fontFamily: "sans-serif" }}
+        >
+          Apri esterno
+        </button>
+      </div>
+      <iframe
+        title="Lumina Studio"
+        src={LUMINA_STUDIO_URL}
+        allow="fullscreen; clipboard-read; clipboard-write"
+        referrerPolicy="no-referrer-when-downgrade"
+        style={{ flex: 1, width: "100%", border: "0", background: "#09090b" }}
+      />
     </div>
   );
 }
@@ -2019,17 +2047,20 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
         {/* CONTENT */}
         <div style={s.content}>
           {/* Tab bar principale */}
-          {elements && (
-            <div style={s.tabs}>
+          <div style={s.tabs}>
+            {elements && (
+              <>
               {tabBtn("preview", "Anteprima", activeTab === "preview")}
               {tabBtn("struttura", "Struttura", activeTab === "struttura")}
               {tabBtn("fountain", "Fountain", activeTab === "fountain")}
+              </>
+            )}
               {analysis && tabBtn("analisi", "Analisi", activeTab === "analisi")}
               {characterSheets && tabBtn("schede", "Schede", activeTab === "schede")}
               {breakdown && tabBtn("breakdown", "Breakdown", activeTab === "breakdown")}
               {locationSheets && tabBtn("locations", "Location", activeTab === "locations")}
-            </div>
-          )}
+            {tabBtn("lumina", "Luci 3D", activeTab === "lumina")}
+          </div>
 
           <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
             {/* Loading formattazione */}
@@ -2078,12 +2109,17 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
             )}
 
             {/* Stato vuoto */}
-            {!loading && !analyzing && !elements && (
+            {!loading && !analyzing && !elements && activeTab !== "lumina" && (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "12px", color: "#666", fontFamily: "sans-serif" }}>
                 <div style={{ fontSize: "48px" }}>🎞️</div>
                 <div style={{ fontSize: "16px", color: "#555" }}>Carica un file e avvia la formattazione</div>
                 <div style={{ fontSize: "13px", color: "#444", maxWidth: "340px", textAlign: "center", lineHeight: "1.6" }}>Dopo la formattazione potrai avviare l'analisi drammaturgica completa: struttura, personaggi, segnalazioni, valutazione.</div>
               </div>
+            )}
+
+            {/* Tab: Lumina Studio */}
+            {!busy && activeTab === "lumina" && (
+              <LuminaStudioPanel />
             )}
 
             {/* Tab: Anteprima */}
