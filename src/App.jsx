@@ -177,6 +177,10 @@ const unwrapLocalPayload = (payload, key) => (
   payload && typeof payload === "object" && key in payload ? payload[key] : payload
 );
 
+const extractLmStudioContent = (data) => (
+  data.choices?.[0]?.message?.content || data.choices?.[0]?.text || ""
+);
+
 // ─── Colori e icone per l'analisi ───────────────────────────────────────────
 const valColors  = { efficace: "#A5D6A7", debole: "#FFD54F", assente: "#FF8A65" };
 const valLabels  = { efficace: "✓ Efficace", debole: "⚠ Debole", assente: "✗ Assente" };
@@ -1796,23 +1800,25 @@ export default function App() {
 
   const isLocalAi = aiProvider === "lmstudio";
 
-  const runLocalLmStudio = async ({ system, user, temperature = 0.1 }) => {
+  const runLocalLmStudio = async ({ system, user, temperature = 0.1, output = "object" }) => {
     const endpoint = lmStudioEndpoint.trim() || DEFAULT_LM_STUDIO_ENDPOINT;
     const model = lmStudioModel.trim() || DEFAULT_LM_STUDIO_MODEL;
+    const buildBody = (messages, temp = temperature) => ({
+      model,
+      messages,
+      temperature: temp,
+      stream: false,
+      ...(output === "object" ? { response_format: { type: "json_object" } } : {}),
+    });
     let response;
     try {
       response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model,
-          messages: [
+        body: JSON.stringify(buildBody([
             { role: "system", content: system },
             { role: "user", content: user },
-          ],
-          temperature,
-          stream: false,
-        }),
+          ])),
       });
     } catch {
       throw new Error(
@@ -1823,9 +1829,40 @@ export default function App() {
     if (!response.ok) {
       throw new Error(data.error?.message || data.message || "LM Studio non ha risposto correttamente. Controlla che il server locale sia avviato e che CORS sia abilitato.");
     }
-    const content = data.choices?.[0]?.message?.content || data.choices?.[0]?.text || "";
+    const content = extractLmStudioContent(data);
     if (!content) throw new Error("LM Studio ha risposto senza contenuto.");
-    return cleanAiJson(content);
+    try {
+      return cleanAiJson(content);
+    } catch (parseError) {
+      if (output === "array") {
+        throw new Error(`LM Studio ha generato JSON non valido: ${parseError.message}`);
+      }
+      const repairResponse = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildBody([
+          {
+            role: "system",
+            content: "Sei un validatore JSON. Correggi la sintassi del testo ricevuto e restituisci SOLO un oggetto JSON valido, senza markdown e senza spiegazioni. Non aggiungere nuove informazioni: ripara solo virgolette, virgole, due punti, parentesi e wrapper.",
+          },
+          {
+            role: "user",
+            content: `Errore parser: ${parseError.message}\n\nJSON da riparare:\n${content}`,
+          },
+        ], 0)),
+      });
+      const repairData = await repairResponse.json().catch(() => ({}));
+      if (!repairResponse.ok) {
+        throw new Error(`LM Studio ha generato JSON non valido e la riparazione automatica non e riuscita: ${parseError.message}`);
+      }
+      const repairedContent = extractLmStudioContent(repairData);
+      if (!repairedContent) throw new Error(`LM Studio ha generato JSON non valido: ${parseError.message}`);
+      try {
+        return cleanAiJson(repairedContent);
+      } catch (repairError) {
+        throw new Error(`LM Studio ha generato JSON non valido anche dopo il secondo tentativo: ${repairError.message}`);
+      }
+    }
   };
 
   const postAiJson = async (url, payload, localConfig) => {
@@ -1875,6 +1912,7 @@ export default function App() {
         system: LOCAL_FORMAT_PROMPTS[mode] || LOCAL_FORMAT_PROMPTS.creative,
         user: `${mode === "conservative" ? "Classifica in modo conservativo" : "Analizza e formatta"} il seguente testo come sceneggiatura cinematografica professionale:\n\n${rawText}`,
         temperature: mode === "conservative" ? 0 : 0.2,
+        output: "array",
       });
       setElements(isLocalAi ? unwrapLocalPayload(data, "elements") : data.elements);
       setActiveTab("preview");
