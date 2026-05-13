@@ -12,7 +12,10 @@ const ANTHROPIC_KEY_STORAGE = "screenplayFormatter.anthropicApiKey";
 const AI_PROVIDER_STORAGE = "screenplayFormatter.aiProvider";
 const LM_STUDIO_ENDPOINT_STORAGE = "screenplayFormatter.lmStudioEndpoint";
 const LM_STUDIO_MODEL_STORAGE = "screenplayFormatter.lmStudioModel";
-const DEFAULT_LM_STUDIO_ENDPOINT = "http://127.0.0.1:1234/v1/chat/completions";
+const DIRECT_LM_STUDIO_ENDPOINT = "http://127.0.0.1:1234/v1/chat/completions";
+const LOCAL_PROXY_LM_STUDIO_ENDPOINT = "/lmstudio/v1/chat/completions";
+const isLocalAppHost = ["localhost", "127.0.0.1"].includes(globalThis.location?.hostname);
+const DEFAULT_LM_STUDIO_ENDPOINT = isLocalAppHost ? LOCAL_PROXY_LM_STUDIO_ENDPOINT : DIRECT_LM_STUDIO_ENDPOINT;
 const DEFAULT_LM_STUDIO_MODEL = "gemma-4";
 const ONBOARDING_STORAGE = "screenplayFormatter.onboardingComplete";
 const APP_TOUR_STORAGE = "screenplayFormatter.appTourComplete";
@@ -1690,7 +1693,12 @@ export default function App() {
       setRememberApiKey(true);
     }
     setAiProvider(window.localStorage.getItem(AI_PROVIDER_STORAGE) || "anthropic");
-    setLmStudioEndpoint(window.localStorage.getItem(LM_STUDIO_ENDPOINT_STORAGE) || DEFAULT_LM_STUDIO_ENDPOINT);
+    const savedEndpoint = window.localStorage.getItem(LM_STUDIO_ENDPOINT_STORAGE) || "";
+    setLmStudioEndpoint(
+      isLocalAppHost && savedEndpoint === DIRECT_LM_STUDIO_ENDPOINT
+        ? DEFAULT_LM_STUDIO_ENDPOINT
+        : savedEndpoint || DEFAULT_LM_STUDIO_ENDPOINT
+    );
     setLmStudioModel(window.localStorage.getItem(LM_STUDIO_MODEL_STORAGE) || DEFAULT_LM_STUDIO_MODEL);
   }, []);
 
@@ -1726,19 +1734,26 @@ export default function App() {
   const runLocalLmStudio = async ({ system, user, temperature = 0.1 }) => {
     const endpoint = lmStudioEndpoint.trim() || DEFAULT_LM_STUDIO_ENDPOINT;
     const model = lmStudioModel.trim() || DEFAULT_LM_STUDIO_MODEL;
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-        temperature,
-        stream: false,
-      }),
-    });
+    let response;
+    try {
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: user },
+          ],
+          temperature,
+          stream: false,
+        }),
+      });
+    } catch {
+      throw new Error(
+        "Non riesco a raggiungere LM Studio. Avvia il server locale OpenAI-compatible, controlla la porta 1234 e, se usi il sito pubblicato, abilita CORS in LM Studio."
+      );
+    }
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       throw new Error(data.error?.message || data.message || "LM Studio non ha risposto correttamente. Controlla che il server locale sia avviato e che CORS sia abilitato.");

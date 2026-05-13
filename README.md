@@ -221,7 +221,8 @@ L'app può usare anche un modello locale esposto da LM Studio tramite server Ope
 Impostazioni predefinite nell'interfaccia:
 
 ```text
-Endpoint: http://127.0.0.1:1234/v1/chat/completions
+Endpoint locale Vite: /lmstudio/v1/chat/completions
+Endpoint sito pubblicato: http://127.0.0.1:1234/v1/chat/completions
 Modello: gemma-4
 ```
 
@@ -230,6 +231,7 @@ Note operative:
 - avvia LM Studio sul computer locale;
 - carica il modello scelto;
 - abilita il server locale OpenAI-compatible;
+- in sviluppo locale l'app usa il proxy Vite `/lmstudio` per evitare problemi CORS;
 - se usi la versione pubblicata su Cloudflare, la chiamata parte dal browser verso il tuo `localhost`, non dal Worker.
 
 ## Sviluppo Locale
