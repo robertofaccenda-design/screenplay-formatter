@@ -512,6 +512,116 @@ const isRealSceneHeading = (element) => (
   && /^(?:\d+\s+)?(?:INT|EST|INT\/EST|INT\.\/EST|I\/E|EXT)\.?\b/i.test(String(element?.content || "").trim())
 );
 
+const parseSceneHeadingMeta = (heading) => {
+  const text = String(heading || "").trim().toUpperCase();
+  const internoEsterno = text.startsWith("INT./EST") || text.startsWith("INT/EST") ? "INT/EST"
+    : text.startsWith("EST") || text.startsWith("EXT") ? "EST"
+      : "INT";
+  const momento = ["GIORNO", "NOTTE", "ALBA", "TRAMONTO"].find((part) => text.includes(part)) || "NON_SPECIFICATO";
+  const location = text
+    .replace(/^(?:\d+\s+)?(?:INT\.\/EST\.?|INT\/EST\.?|INT\.?|EST\.?|EXT\.?|I\/E)\s*/i, "")
+    .split(/\s+-\s+/)[0]
+    .trim() || heading;
+  return { internoEsterno, momento, location };
+};
+
+const buildFallbackBreakdown = (elements = []) => {
+  const scenes = [];
+  let current = null;
+
+  elements.forEach((element) => {
+    if (isRealSceneHeading(element)) {
+      const meta = parseSceneHeadingMeta(element.content);
+      current = {
+        numero: scenes.length + 1,
+        titolo: element.content,
+        interno_esterno: meta.internoEsterno,
+        momento: meta.momento,
+        cast: [],
+        comparse_stimate: 0,
+        props_principali: [],
+        location_descrizione: meta.location,
+        complessità: "media",
+        elementi_speciali: [],
+        note_regia: "Breakdown base generato automaticamente dai dati formattati.",
+      };
+      scenes.push(current);
+      return;
+    }
+
+    if (!current) return;
+    if (element.type === "character") {
+      const name = String(element.content || "").trim().replace(/[()]/g, "").toUpperCase();
+      if (name && !current.cast.includes(name)) current.cast.push(name);
+    }
+  });
+
+  const cast = uniq(scenes.flatMap((scene) => scene.cast)).map((nome) => ({
+    nome,
+    ruolo_tipo: "non_specificato",
+    scene: scenes.filter((scene) => scene.cast.includes(nome)).map((scene) => scene.numero),
+    giorni_lavoro_stimati: 1,
+    continuità_costume: "non_specificato",
+    note_casting: "Da dettagliare manualmente o rigenerare con un modello più stabile.",
+  }));
+
+  const locations = uniq(scenes.map((scene) => scene.location_descrizione)).map((nome) => {
+    const locationScenes = scenes.filter((scene) => scene.location_descrizione === nome);
+    return {
+      nome,
+      tipo: locationScenes[0]?.interno_esterno || "non_specificato",
+      scene: locationScenes.map((scene) => scene.numero),
+      allestimento: "medio",
+      note_ricerca: "Da verificare con location scouting.",
+      problemi_potenziali: "non_specificato",
+    };
+  });
+
+  const workDays = [];
+  for (let index = 0; index < scenes.length; index += 4) {
+    workDays.push({
+      giorno: workDays.length + 1,
+      scene_consigliate: scenes.slice(index, index + 4).map((scene) => scene.numero),
+      motivazione: "Raggruppamento automatico di base. Puoi cambiare l'ordine delle giornate dalla vista Piano di lavoro.",
+      ore_stimate: Math.min(8, Math.max(4, scenes.slice(index, index + 4).length * 2)),
+    });
+  }
+
+  return {
+    riepilogo: {
+      totale_scene: scenes.length,
+      personaggi_parlanti: cast.length,
+      location_uniche: locations.length,
+      scene_interne: scenes.filter((scene) => scene.interno_esterno === "INT").length,
+      scene_esterne: scenes.filter((scene) => scene.interno_esterno === "EST").length,
+      scene_giorno: scenes.filter((scene) => scene.momento === "GIORNO").length,
+      scene_notte: scenes.filter((scene) => scene.momento === "NOTTE").length,
+      giorni_ripresa_stimati: workDays.length || 1,
+      complessità_produttiva: "media",
+      note_produzione: "Breakdown base generato automaticamente perché LM Studio ha prodotto JSON non valido.",
+    },
+    per_scena: scenes,
+    reparti: {
+      cast,
+      locations,
+      props: [],
+      costumi: cast.map((item) => ({
+        personaggio: item.nome,
+        periodo_stile: "non_specificato",
+        cambi_costume: 1,
+        scene: item.scene,
+        capi_identificati: [],
+        note_continuità: "non_specificato",
+      })),
+      comparse: [],
+      effetti_speciali: [],
+      audio_musica: [],
+      veicoli: [],
+    },
+    piano_lavoro_suggerito: workDays,
+  };
+};
+
 const formatPageEighths = (eighths) => {
   const pages = Math.floor(eighths / 8);
   const remainder = eighths % 8;
@@ -2485,6 +2595,12 @@ export default function App() {
       setBreakdown(isLocalAi ? unwrapLocalPayload(data, ["breakdown", "breakdown_reparti"]) : data.breakdown);
       setActiveTab("breakdown");
     } catch (e) {
+      if (isLocalAi) {
+        console.warn("Breakdown LM Studio non valido, genero fallback locale:", e);
+        setBreakdown(buildFallbackBreakdown(elements));
+        setActiveTab("breakdown");
+        return;
+      }
       setError("Errore breakdown: " + e.message);
     } finally {
       setLoadingBreakdown(false);
