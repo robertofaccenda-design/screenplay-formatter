@@ -462,6 +462,11 @@ const estimateElementLines = (element) => {
   return wrappedLines;
 };
 
+const isRealSceneHeading = (element) => (
+  element?.type === "scene_heading"
+  && /^(?:\d+\s+)?(?:INT|EST|INT\/EST|INT\.\/EST|I\/E|EXT)\.?\b/i.test(String(element?.content || "").trim())
+);
+
 const formatPageEighths = (eighths) => {
   const pages = Math.floor(eighths / 8);
   const remainder = eighths % 8;
@@ -486,7 +491,7 @@ function getScenePageEighths(elements) {
   };
 
   elements.forEach((element, index) => {
-    if (element.type === "scene_heading") {
+    if (isRealSceneHeading(element)) {
       closeScene();
       sceneNumber += 1;
       currentScene = {
@@ -516,6 +521,7 @@ function buildScreenplayHtml(elements, { scenePageBreaks = false } = {}) {
     if (el.type === "transition") return `<div class="transition">${content}</div>`;
     if (el.type === "scene_heading") {
       const sceneInfo = scenePageEighths.get(index);
+      if (!sceneInfo) return `<div class="action">${content}</div>`;
       const badge = sceneInfo ? `<span class="scene-eighth">Scena ${sceneInfo.sceneNumber} · ${sceneInfo.label}</span>` : "";
       const pageBreakClass = scenePageBreaks && sceneInfo?.sceneNumber > 1 ? " page-break-before" : "";
       return `<div class="scene-heading${pageBreakClass}"><span>${content}</span>${badge}</div>`;
@@ -540,6 +546,9 @@ function ScreenplayPreview({ elements }) {
         if (el.type === "transition") return <div key={i} style={{ textAlign: "right", textTransform: "uppercase", marginTop: "12px", marginBottom: "4px" }}>{el.content}</div>;
         if (el.type === "scene_heading") {
           const sceneInfo = scenePageEighths.get(i);
+          if (!sceneInfo) {
+            return <div key={i} style={{ marginTop: "8px", marginBottom: "8px" }}>{el.content}</div>;
+          }
           return (
             <div key={i} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "16px", fontWeight: "bold", textTransform: "uppercase", marginTop: "20px", marginBottom: "4px", textDecoration: "underline" }}>
               <span>{el.content}</span>
@@ -2373,7 +2382,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
   const canRunBreakdown = !!elements && !busy;
 
   const stats = elements ? {
-    scene:     elements.filter((e) => e.type === "scene_heading").length,
+    scene:     elements.filter(isRealSceneHeading).length,
     character: [...new Set(elements.filter((e) => e.type === "character").map((e) => e.content))].length,
     dialogue:  elements.filter((e) => e.type === "dialogue").length,
     action:    elements.filter((e) => e.type === "action").length,
@@ -2759,7 +2768,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
                       {typeLabels[el.type] || el.type}
                     </span>
                     <span style={{ fontFamily: "monospace", fontSize: "13px", color: "#ccc", lineHeight: "1.5" }}>{el.content}</span>
-                    {el.type === "scene_heading" && scenePageEighths.get(i) && (
+                    {isRealSceneHeading(el) && scenePageEighths.get(i) && (
                       <span style={{ marginLeft: "auto", padding: "2px 8px", borderRadius: "4px", fontSize: "10px", fontFamily: "sans-serif", background: "rgba(200,169,110,.12)", color: "#c8a96e", border: "1px solid rgba(200,169,110,.25)", whiteSpace: "nowrap" }}>
                         Scena {scenePageEighths.get(i).sceneNumber} · {scenePageEighths.get(i).label}
                       </span>
