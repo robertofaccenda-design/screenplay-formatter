@@ -365,6 +365,51 @@ const extractLmStudioContent = (data) => (
   data.choices?.[0]?.message?.content || data.choices?.[0]?.text || ""
 );
 
+const LOCAL_FORMAT_CHUNK_LIMIT = 5500;
+
+const splitTextForLocalFormatting = (text, limit = LOCAL_FORMAT_CHUNK_LIMIT) => {
+  const normalized = String(text || "").trim();
+  if (normalized.length <= limit) return [normalized].filter(Boolean);
+
+  const paragraphs = normalized.split(/\n{2,}/);
+  const chunks = [];
+  let current = "";
+
+  const pushCurrent = () => {
+    if (current.trim()) chunks.push(current.trim());
+    current = "";
+  };
+
+  for (const paragraph of paragraphs) {
+    const block = paragraph.trim();
+    if (!block) continue;
+
+    if (block.length > limit) {
+      pushCurrent();
+      for (let index = 0; index < block.length; index += limit) {
+        chunks.push(block.slice(index, index + limit).trim());
+      }
+      continue;
+    }
+
+    const next = current ? `${current}\n\n${block}` : block;
+    if (next.length > limit) {
+      pushCurrent();
+      current = block;
+    } else {
+      current = next;
+    }
+  }
+
+  pushCurrent();
+  return chunks;
+};
+
+const normalizeElementsPayload = (data, isLocal) => {
+  const payload = isLocal ? unwrapLocalPayload(data, ["elements", "elementi"]) : data?.elements;
+  return Array.isArray(payload) ? payload : [];
+};
+
 // ─── Colori e icone per l'analisi ───────────────────────────────────────────
 const valColors  = { efficace: "#A5D6A7", debole: "#FFD54F", assente: "#FF8A65" };
 const valLabels  = { efficace: "✓ Efficace", debole: "⚠ Debole", assente: "✗ Assente" };
@@ -2137,13 +2182,30 @@ export default function App() {
     setLoading(true); setError(""); setElements(null); setAnalysis(null); setCharacterSheets(null); setBreakdown(null); setLocationSheets(null);
     try {
       setLoadingMsg(mode === "conservative" ? "Parsing conservativo in corso..." : "Formattazione creativa in corso...");
-      const data = await postAiJson(API_FORMAT, { text: rawText, mode }, {
-        system: LOCAL_FORMAT_PROMPTS[mode] || LOCAL_FORMAT_PROMPTS.creative,
-        user: `${mode === "conservative" ? "Classifica in modo conservativo" : "Analizza e formatta"} il seguente testo come sceneggiatura cinematografica professionale:\n\n${rawText}`,
-        temperature: mode === "conservative" ? 0 : 0.2,
-        output: "array",
-      });
-      setElements(isLocalAi ? unwrapLocalPayload(data, ["elements", "elementi"]) : data.elements);
+      const formatChunk = async (text, index = 0, total = 1) => {
+        if (isLocalAi && total > 1) {
+          setLoadingMsg(`${mode === "conservative" ? "Parsing conservativo" : "Formattazione creativa"} con LM Studio: blocco ${index + 1}/${total}...`);
+        }
+        const data = await postAiJson(API_FORMAT, { text, mode }, {
+          system: LOCAL_FORMAT_PROMPTS[mode] || LOCAL_FORMAT_PROMPTS.creative,
+          user: `${mode === "conservative" ? "Classifica in modo conservativo" : "Analizza e formatta"} il seguente frammento come sceneggiatura cinematografica professionale. Restituisci solo gli elementi ricavati da questo frammento, senza riassumere i frammenti precedenti o successivi:\n\n${text}`,
+          temperature: mode === "conservative" ? 0 : 0.2,
+          output: "array",
+        });
+        return normalizeElementsPayload(data, isLocalAi);
+      };
+
+      const chunks = isLocalAi ? splitTextForLocalFormatting(rawText) : [rawText];
+      const formattedChunks = [];
+      for (let index = 0; index < chunks.length; index += 1) {
+        formattedChunks.push(...await formatChunk(chunks[index], index, chunks.length));
+      }
+
+      if (!formattedChunks.length) {
+        throw new Error("La formattazione non ha prodotto elementi validi.");
+      }
+
+      setElements(formattedChunks);
       setActiveTab("preview");
     } catch (e) {
       setError("Errore: " + e.message);
