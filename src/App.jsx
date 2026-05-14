@@ -280,13 +280,14 @@ SCHEMA ESATTO:
     "note_generali": ""
   }
 }`,
-  breakdown: `Sei un direttore di produzione cinematografica. Genera un breakdown per reparti da una sceneggiatura JSON.
+  breakdown: `Sei un direttore di produzione cinematografica. Genera un breakdown operativo per reparti da una sceneggiatura JSON.
 
 ISTRUZIONI IMPORTANTI:
 - Non restituire array vuoti se nella sceneggiatura ci sono scene, personaggi, props o location deducibili.
 - Numera le scene in ordine progressivo usando "scene_heading".
-- Estrai cast dagli elementi "character".
-- Estrai locations dalle intestazioni di scena.
+- Estrai cast dagli elementi "character" e crea una scheda per ogni personaggio.
+- Estrai locations dalle intestazioni di scena e crea una scheda per ogni luogo.
+- Estrai o deduci props, costumi, comparse, audio, veicoli ed effetti da azioni/dialoghi/contesto.
 - Usa "non_specificato" quando un dato non e deducibile.
 - Restituisci ESCLUSIVAMENTE un oggetto JSON valido, senza markdown e senza spiegazioni.
 
@@ -320,15 +321,57 @@ SCHEMA ESATTO:
     }
   ],
   "reparti": {
-    "cast": [],
-    "locations": [],
-    "props": [],
-    "costumi": [],
+    "cast": [
+      {
+        "nome": "",
+        "ruolo_tipo": "protagonista|secondario|figurazione|non_specificato",
+        "scene": [1],
+        "giorni_lavoro_stimati": 1,
+        "continuità_costume": "non_specificato",
+        "note_casting": "non_specificato"
+      }
+    ],
+    "locations": [
+      {
+        "nome": "",
+        "tipo": "INT|EST|INT/EST|non_specificato",
+        "scene": [1],
+        "allestimento": "minimo|medio|importante|costruito_in_studio",
+        "note_ricerca": "non_specificato",
+        "problemi_potenziali": "non_specificato"
+      }
+    ],
+    "props": [
+      {
+        "oggetto": "",
+        "tipo": "praticabile|decorativo|arma|veicolo|elettronico|animale|cibo|non_specificato",
+        "scene": [1],
+        "note": "non_specificato"
+      }
+    ],
+    "costumi": [
+      {
+        "personaggio": "",
+        "periodo_stile": "non_specificato",
+        "cambi_costume": 1,
+        "scene": [1],
+        "capi_identificati": [],
+        "note_continuità": "non_specificato"
+      }
+    ],
+    "comparse": [
+      {
+        "gruppo": "",
+        "quantità_stimata": 0,
+        "scene": [1],
+        "note": "non_specificato"
+      }
+    ],
     "effetti_speciali": [],
     "audio_musica": [],
     "veicoli": []
   },
-  "piano_riprese_suggerito": [
+  "piano_lavoro_suggerito": [
     {
       "giorno": 1,
       "scene_consigliate": [1],
@@ -1677,10 +1720,135 @@ function Badge({ label, color, small }) {
   );
 }
 
+const asArray = (value) => Array.isArray(value) ? value : [];
+const sceneList = (value) => asArray(value).filter((item) => item !== undefined && item !== null);
+const uniq = (items) => [...new Set(items.filter(Boolean))];
+
+const normalizeBreakdownCast = (reparti, perScena) => {
+  const explicit = asArray(reparti?.cast).map((item) => (
+    typeof item === "string"
+      ? { nome: item, ruolo_tipo: "non_specificato", scene: [], giorni_lavoro_stimati: 1 }
+      : item
+  )).filter((item) => item?.nome);
+  if (explicit.length) return explicit;
+
+  return uniq(asArray(perScena).flatMap((sc) => asArray(sc.cast))).map((nome) => ({
+    nome,
+    ruolo_tipo: "non_specificato",
+    scene: asArray(perScena).filter((sc) => asArray(sc.cast).includes(nome)).map((sc) => sc.numero),
+    giorni_lavoro_stimati: 1,
+    continuità_costume: "non_specificato",
+    note_casting: "Da verificare in casting.",
+  }));
+};
+
+const normalizeBreakdownLocations = (reparti, perScena) => {
+  const explicit = asArray(reparti?.locations).map((item) => (
+    typeof item === "string"
+      ? { nome: item, tipo: "non_specificato", scene: [] }
+      : item
+  )).filter((item) => item?.nome);
+  if (explicit.length) return explicit;
+
+  return uniq(asArray(perScena).map((sc) => sc.location_descrizione || sc.titolo)).map((nome) => ({
+    nome,
+    tipo: asArray(perScena).find((sc) => (sc.location_descrizione || sc.titolo) === nome)?.interno_esterno || "non_specificato",
+    scene: asArray(perScena).filter((sc) => (sc.location_descrizione || sc.titolo) === nome).map((sc) => sc.numero),
+    allestimento: "medio",
+    note_ricerca: "Da verificare con location scouting.",
+    problemi_potenziali: "non_specificato",
+  }));
+};
+
+const normalizeBreakdownProps = (reparti, perScena) => {
+  const explicit = asArray(reparti?.props).map((item) => (
+    typeof item === "string"
+      ? { oggetto: item, tipo: "non_specificato", scene: [] }
+      : item
+  )).filter((item) => item?.oggetto);
+  if (explicit.length) return explicit;
+
+  return uniq(asArray(perScena).flatMap((sc) => asArray(sc.props_principali))).map((oggetto) => ({
+    oggetto,
+    tipo: "non_specificato",
+    scene: asArray(perScena).filter((sc) => asArray(sc.props_principali).includes(oggetto)).map((sc) => sc.numero),
+    note: "Da confermare con scenografia/attrezzeria.",
+  }));
+};
+
+const normalizeBreakdownCostumes = (reparti, castItems) => {
+  const explicit = asArray(reparti?.costumi).map((item) => (
+    typeof item === "string"
+      ? { personaggio: item, periodo_stile: "non_specificato", cambi_costume: 1, scene: [] }
+      : item
+  )).filter((item) => item?.personaggio);
+  if (explicit.length) return explicit;
+
+  return castItems.map((cast) => ({
+    personaggio: cast.nome,
+    periodo_stile: "non_specificato",
+    cambi_costume: 1,
+    scene: sceneList(cast.scene),
+    capi_identificati: [],
+    note_continuità: cast.continuità_costume || "non_specificato",
+  }));
+};
+
+const normalizeBreakdownExtras = (reparti, perScena) => {
+  const explicitComparse = asArray(reparti?.comparse).map((item) => (
+    typeof item === "string"
+      ? { gruppo: item, quantità_stimata: 0, scene: [] }
+      : item
+  )).filter((item) => item?.gruppo || item?.quantità_stimata > 0);
+  const inferredComparse = explicitComparse.length ? [] : asArray(perScena)
+    .filter((sc) => Number(sc.comparse_stimate) > 0)
+    .map((sc) => ({
+      gruppo: `Comparse scena ${sc.numero}`,
+      quantità_stimata: sc.comparse_stimate,
+      scene: [sc.numero],
+      note: sc.titolo || "Da dettagliare con aiuto regia.",
+    }));
+
+  return {
+    comparse: [...explicitComparse, ...inferredComparse],
+    effetti: asArray(reparti?.effetti_speciali),
+    veicoli: asArray(reparti?.veicoli),
+    audio: asArray(reparti?.audio_musica),
+  };
+};
+
+function EmptyBreakdownSection({ label }) {
+  return (
+    <div style={{ padding: "18px", border: "1px dashed rgba(255,255,255,.12)", borderRadius: "8px", color: "#777", fontSize: "12px", fontFamily: "sans-serif" }}>
+      Nessuna voce disponibile per {label}. Rigenera il breakdown dopo aver completato la formattazione creativa.
+    </div>
+  );
+}
+
 function BreakdownPanel({ data }) {
   const [activeTab, setActiveTab] = useState("riepilogo");
+  const [workPlan, setWorkPlan] = useState([]);
+  useEffect(() => {
+    setWorkPlan(asArray(data?.piano_lavoro_suggerito || data?.piano_riprese_suggerito));
+  }, [data]);
   if (!data) return null;
-  const { riepilogo, per_scena, reparti, piano_riprese_suggerito } = data;
+  const { riepilogo, per_scena, reparti } = data;
+  const castItems = normalizeBreakdownCast(reparti, per_scena);
+  const locationItems = normalizeBreakdownLocations(reparti, per_scena);
+  const propItems = normalizeBreakdownProps(reparti, per_scena);
+  const costumeItems = normalizeBreakdownCostumes(reparti, castItems);
+  const extraItems = normalizeBreakdownExtras(reparti, per_scena);
+  const extraCount = extraItems.comparse.length + extraItems.effetti.length + extraItems.veicoli.length + extraItems.audio.length;
+
+  const moveWorkDay = (index, direction) => {
+    setWorkPlan((current) => {
+      const next = [...current];
+      const target = index + direction;
+      if (target < 0 || target >= next.length) return current;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next.map((day, dayIndex) => ({ ...day, giorno: dayIndex + 1 }));
+    });
+  };
 
   const tabBtn = (id, label, count) => (
     <button key={id} onClick={() => setActiveTab(id)} style={{
@@ -1701,13 +1869,12 @@ function BreakdownPanel({ data }) {
       <div style={{ display: "flex", padding: "10px 20px 0", gap: "4px", borderBottom: "1px solid rgba(255,255,255,.05)", flexWrap: "wrap" }}>
         {tabBtn("riepilogo", "Riepilogo", 0)}
         {tabBtn("scene",     "Per scena", per_scena?.length || 0)}
-        {tabBtn("cast",      "Cast",      reparti?.cast?.length || 0)}
-        {tabBtn("locations", "Location",  reparti?.locations?.length || 0)}
-        {tabBtn("props",     "Props",     reparti?.props?.length || 0)}
-        {tabBtn("costumi",   "Costumi",   reparti?.costumi?.length || 0)}
-        {(reparti?.effetti_speciali?.length > 0 || reparti?.veicoli?.length > 0) &&
-          tabBtn("extra", "Extra", (reparti?.effetti_speciali?.length || 0) + (reparti?.veicoli?.length || 0))}
-        {piano_riprese_suggerito?.length > 0 && tabBtn("piano", "Piano riprese", piano_riprese_suggerito?.length || 0)}
+        {tabBtn("cast",      "Cast",      castItems.length)}
+        {tabBtn("locations", "Location",  locationItems.length)}
+        {tabBtn("props",     "Props",     propItems.length)}
+        {tabBtn("costumi",   "Costumi",   costumeItems.length)}
+        {extraCount > 0 && tabBtn("extra", "Extra", extraCount)}
+        {workPlan.length > 0 && tabBtn("piano", "Piano di lavoro", workPlan.length)}
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
@@ -1781,14 +1948,15 @@ function BreakdownPanel({ data }) {
         )}
 
         {/* CAST */}
-        {activeTab === "cast" && reparti?.cast && (
+        {activeTab === "cast" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            {reparti.cast.map((c) => (
+            {!castItems.length && <EmptyBreakdownSection label="il cast" />}
+            {castItems.map((c) => (
               <div key={c.nome} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: "8px", padding: "12px 16px" }}>
                 <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "8px", flexWrap: "wrap" }}>
                   <span style={{ fontSize: "14px", fontWeight: "bold", fontFamily: "monospace", color: "#FFD54F" }}>{c.nome}</span>
                   <Badge label={c.ruolo_tipo?.replace(/_/g, " ")} color={ruoloColors?.[c.ruolo_tipo] || "#888"} small />
-                  <span style={{ marginLeft: "auto", fontSize: "11px", color: "#888", fontFamily: "sans-serif" }}>{c.giorni_lavoro_stimati} gg · scene {c.scene?.join(", ")}</span>
+                  <span style={{ marginLeft: "auto", fontSize: "11px", color: "#888", fontFamily: "sans-serif" }}>{c.giorni_lavoro_stimati || 1} gg · scene {sceneList(c.scene).join(", ") || "n/d"}</span>
                 </div>
                 {c.continuità_costume && c.continuità_costume !== "non specificato" && (
                   <div style={{ fontSize: "11px", color: "#aaa", fontFamily: "sans-serif" }}>👔 Continuità: {c.continuità_costume}</div>
@@ -1800,15 +1968,16 @@ function BreakdownPanel({ data }) {
         )}
 
         {/* LOCATIONS */}
-        {activeTab === "locations" && reparti?.locations && (
+        {activeTab === "locations" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            {reparti.locations.map((l, i) => (
+            {!locationItems.length && <EmptyBreakdownSection label="le location" />}
+            {locationItems.map((l, i) => (
               <div key={i} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: "8px", padding: "12px 16px" }}>
                 <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "8px", flexWrap: "wrap" }}>
                   <span style={{ fontSize: "13px", fontWeight: "bold", color: "#f0ead8", fontFamily: "sans-serif" }}>📍 {l.nome}</span>
                   <Badge label={l.tipo} color="#4FC3F7" small />
                   <Badge label={l.allestimento?.replace(/_/g, " ")} color={allestimentoColors[l.allestimento] || "#888"} small />
-                  <span style={{ marginLeft: "auto", fontSize: "11px", color: "#666", fontFamily: "sans-serif" }}>scene {l.scene?.join(", ")}</span>
+                  <span style={{ marginLeft: "auto", fontSize: "11px", color: "#666", fontFamily: "sans-serif" }}>scene {sceneList(l.scene).join(", ") || "n/d"}</span>
                 </div>
                 {l.note_ricerca && <div style={{ fontSize: "12px", color: "#aaa", fontFamily: "sans-serif", lineHeight: "1.5" }}>🔍 {l.note_ricerca}</div>}
                 {l.problemi_potenziali && l.problemi_potenziali !== "non specificato" && (
@@ -1820,30 +1989,32 @@ function BreakdownPanel({ data }) {
         )}
 
         {/* PROPS */}
-        {activeTab === "props" && reparti?.props && (
+        {activeTab === "props" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            {reparti.props.map((p, i) => (
+            {!propItems.length && <EmptyBreakdownSection label="i props" />}
+            {propItems.map((p, i) => (
               <div key={i} style={{ display: "flex", gap: "12px", alignItems: "flex-start", padding: "10px 14px", background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.05)", borderRadius: "6px" }}>
                 <Badge label={p.tipo} color={propTipoColors[p.tipo] || "#888"} small />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: "12px", color: "#ddd", fontFamily: "sans-serif", fontWeight: "500" }}>{p.oggetto}</div>
                   {p.note && <div style={{ fontSize: "11px", color: "#666", fontFamily: "sans-serif", marginTop: "2px" }}>{p.note}</div>}
                 </div>
-                <div style={{ fontSize: "10px", color: "#555", fontFamily: "monospace", whiteSpace: "nowrap" }}>sc. {p.scene?.join(", ")}</div>
+                <div style={{ fontSize: "10px", color: "#555", fontFamily: "monospace", whiteSpace: "nowrap" }}>sc. {sceneList(p.scene).join(", ") || "n/d"}</div>
               </div>
             ))}
           </div>
         )}
 
         {/* COSTUMI */}
-        {activeTab === "costumi" && reparti?.costumi && (
+        {activeTab === "costumi" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            {reparti.costumi.map((c, i) => (
+            {!costumeItems.length && <EmptyBreakdownSection label="i costumi" />}
+            {costumeItems.map((c, i) => (
               <div key={i} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: "8px", padding: "12px 16px" }}>
                 <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "8px", flexWrap: "wrap" }}>
                   <span style={{ fontSize: "13px", fontWeight: "bold", color: "#FFD54F", fontFamily: "monospace" }}>{c.personaggio}</span>
                   {c.periodo_stile && <Badge label={c.periodo_stile} color="#CE93D8" small />}
-                  <span style={{ fontSize: "11px", color: "#666", fontFamily: "sans-serif" }}>{c.cambi_costume} cambi · scene {c.scene?.join(", ")}</span>
+                  <span style={{ fontSize: "11px", color: "#666", fontFamily: "sans-serif" }}>{c.cambi_costume || 1} cambi · scene {sceneList(c.scene).join(", ") || "n/d"}</span>
                 </div>
                 {c.capi_identificati?.length > 0 && (
                   <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "6px" }}>
@@ -1863,10 +2034,23 @@ function BreakdownPanel({ data }) {
         {/* EXTRA: SFX + Veicoli + Audio */}
         {activeTab === "extra" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            {reparti?.effetti_speciali?.length > 0 && (
+            {extraItems.comparse.length > 0 && (
               <div>
-                <div style={{ fontSize: "11px", color: "#888", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px" }}>⚡ Effetti speciali</div>
-                {reparti.effetti_speciali.map((e, i) => (
+                <div style={{ fontSize: "11px", color: "#888", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px" }}>Comparse / figurazioni</div>
+                {extraItems.comparse.map((e, i) => (
+                  <div key={i} style={{ padding: "8px 14px", background: "rgba(255,255,255,.025)", border: "1px solid rgba(255,255,255,.08)", borderRadius: "6px", marginBottom: "6px", display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: "12px", color: "#ddd", fontFamily: "sans-serif", flex: 1 }}>{e.gruppo}</span>
+                    <Badge label={`${e.quantità_stimata || 0} persone`} color="#888" small />
+                    <span style={{ fontSize: "10px", color: "#666", fontFamily: "monospace" }}>sc. {sceneList(e.scene).join(", ") || "n/d"}</span>
+                    {e.note && <div style={{ width: "100%", fontSize: "11px", color: "#777", fontFamily: "sans-serif" }}>{e.note}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {extraItems.effetti.length > 0 && (
+              <div>
+                <div style={{ fontSize: "11px", color: "#888", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px" }}>Effetti speciali</div>
+                {extraItems.effetti.map((e, i) => (
                   <div key={i} style={{ padding: "8px 14px", background: "rgba(255,107,107,.05)", border: "1px solid rgba(255,107,107,.15)", borderRadius: "6px", marginBottom: "6px" }}>
                     <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
                       <span style={{ fontSize: "12px", color: "#ddd", fontFamily: "sans-serif" }}>{e.tipo}</span>
@@ -1879,21 +2063,21 @@ function BreakdownPanel({ data }) {
                 ))}
               </div>
             )}
-            {reparti?.veicoli?.length > 0 && (
+            {extraItems.veicoli.length > 0 && (
               <div>
-                <div style={{ fontSize: "11px", color: "#888", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px" }}>🚗 Veicoli</div>
-                {reparti.veicoli.map((v, i) => (
+                <div style={{ fontSize: "11px", color: "#888", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px" }}>Veicoli</div>
+                {extraItems.veicoli.map((v, i) => (
                   <div key={i} style={{ padding: "8px 14px", background: "rgba(255,213,79,.05)", border: "1px solid rgba(255,213,79,.15)", borderRadius: "6px", marginBottom: "6px", display: "flex", gap: "10px", alignItems: "center" }}>
                     <span style={{ fontSize: "12px", color: "#ddd", fontFamily: "sans-serif", flex: 1 }}>{v.veicolo}</span>
-                    <span style={{ fontSize: "10px", color: "#666", fontFamily: "monospace" }}>sc. {v.scene?.join(", ")}</span>
+                    <span style={{ fontSize: "10px", color: "#666", fontFamily: "monospace" }}>sc. {sceneList(v.scene).join(", ") || "n/d"}</span>
                   </div>
                 ))}
               </div>
             )}
-            {reparti?.audio_musica?.length > 0 && (
+            {extraItems.audio.length > 0 && (
               <div>
-                <div style={{ fontSize: "11px", color: "#888", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px" }}>🎵 Audio / Sound design</div>
-                {reparti.audio_musica.map((a, i) => (
+                <div style={{ fontSize: "11px", color: "#888", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px" }}>Audio / Sound design</div>
+                {extraItems.audio.map((a, i) => (
                   <div key={i} style={{ padding: "8px 14px", background: "rgba(78,195,247,.05)", border: "1px solid rgba(78,195,247,.15)", borderRadius: "6px", marginBottom: "6px" }}>
                     <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
                       <span style={{ fontSize: "12px", color: "#ddd", fontFamily: "sans-serif", flex: 1 }}>{a.elemento}</span>
@@ -1905,17 +2089,25 @@ function BreakdownPanel({ data }) {
                 ))}
               </div>
             )}
+            {extraCount === 0 && <EmptyBreakdownSection label="extra e comparse" />}
           </div>
         )}
 
-        {/* PIANO RIPRESE */}
-        {activeTab === "piano" && piano_riprese_suggerito && (
+        {/* PIANO DI LAVORO */}
+        {activeTab === "piano" && workPlan && (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            {piano_riprese_suggerito.map((g) => (
-              <div key={g.giorno} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: "8px", padding: "14px 16px" }}>
+            <div style={{ fontSize: "12px", color: "#888", fontFamily: "sans-serif", marginBottom: "4px" }}>
+              Piano di lavoro modificabile: usa le frecce per cambiare l'ordine delle giornate.
+            </div>
+            {workPlan.map((g, index) => (
+              <div key={`${g.giorno}-${index}`} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: "8px", padding: "14px 16px" }}>
                 <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "10px", flexWrap: "wrap" }}>
                   <div style={{ background: "linear-gradient(135deg,#c8a96e,#b8994e)", borderRadius: "6px", padding: "6px 12px", fontSize: "13px", fontWeight: "bold", fontFamily: "sans-serif", color: "#0a0a0f" }}>
                     Giorno {g.giorno}
+                  </div>
+                  <div style={{ display: "flex", gap: "4px" }}>
+                    <button onClick={() => moveWorkDay(index, -1)} disabled={index === 0} style={{ padding: "4px 8px", borderRadius: "5px", border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.05)", color: index === 0 ? "#444" : "#ddd", cursor: index === 0 ? "not-allowed" : "pointer" }}>↑</button>
+                    <button onClick={() => moveWorkDay(index, 1)} disabled={index === workPlan.length - 1} style={{ padding: "4px 8px", borderRadius: "5px", border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.05)", color: index === workPlan.length - 1 ? "#444" : "#ddd", cursor: index === workPlan.length - 1 ? "not-allowed" : "pointer" }}>↓</button>
                   </div>
                   <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                     {g.scene_consigliate?.map(sc => (
@@ -2716,7 +2908,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "16px" }}>
                 <div style={{ width: "40px", height: "40px", border: "3px solid rgba(230,81,0,.2)", borderTop: "3px solid #E65100", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
                 <div style={{ fontFamily: "sans-serif", color: "#FFAB91", fontSize: "14px" }}>Breakdown per reparti in corso...</div>
-                <div style={{ fontFamily: "monospace", color: "#555", fontSize: "11px" }}>Cast · Location · Props · Costumi · Piano riprese</div>
+                <div style={{ fontFamily: "monospace", color: "#555", fontSize: "11px" }}>Cast · Location · Props · Costumi · Piano di lavoro</div>
               </div>
             )}
 
