@@ -24,6 +24,8 @@ Moduli previsti:
 
 - Importa testi `.txt` e `.docx`
 - Accetta anche testo incollato direttamente nella textarea
+- Integra il modulo **Crea la tua storia** raggiungibile dalla home e dalla rotta `/crea-la-tua-storia/`
+- Permette di creare una storia guidata, esportarla in PDF/TXT e caricarla direttamente nella formattazione creativa di DeepFrame
 - Riconosce gli elementi principali di una sceneggiatura:
   - titolo
   - intestazioni scena
@@ -43,8 +45,76 @@ Moduli previsti:
 - Genera schede personaggio
 - Genera schede location
 - Genera breakdown per reparti di produzione
+- Esporta in PDF anche schede personaggio, schede location e breakdown reparti
 - Integra Lumina Studio in una scheda **Luci 3D** per simulazioni di setup luce
 - Permette di scegliere tra AI Anthropic su Cloudflare e modello locale via LM Studio
+
+## Aggiornamenti Recenti
+
+### Crea La Tua Storia
+
+Il repository include il modulo separato:
+
+```text
+genera-la-tua-idea-rome-future-week-2025/
+```
+
+Funzioni principali:
+
+- accesso dalla home di DeepFrame tramite pulsante **Crea la tua storia**;
+- uso della stessa chiave API e dello stesso provider AI configurato in DeepFrame;
+- supporto a LM Studio locale quando l'app principale usa LM Studio;
+- fallback Anthropic su Claude Sonnet quando non si usa LM Studio;
+- pulizia dell'output narrativo da blocchi tecnici come markdown, JSON, matrici scelte e residui `#`, `##`, `---`;
+- fallback automatico delle scelte narrative quando il modello non restituisce una matrice valida;
+- esportazione della storia in PDF o TXT;
+- pulsante per inviare la storia generata alla **Formattazione Creativa** di DeepFrame.
+
+### Formattazione Creativa
+
+La formattazione creativa non si limita piu a riclassificare una storia come sceneggiatura: espande il materiale narrativo, aggiunge contenuto cinematografico coerente e produce scene piu complete a partire dal documento sorgente.
+
+Correzioni importanti:
+
+- con LM Studio i testi lunghi vengono divisi in blocchi per ridurre rifiuti o errori di contesto;
+- la riparazione JSON gestisce anche array malformati prodotti da modelli locali;
+- il conteggio scene riconosce come scene solo intestazioni reali `INT`, `EST`, `INT/EST`, `EXT`, evitando di numerare titoli o atti.
+
+### Breakdown Reparti
+
+Il breakdown e stato esteso come strumento operativo di produzione:
+
+- riepilogo sempre popolato, anche quando l'AI non restituisce correttamente il blocco `riepilogo`;
+- schede per scena con cast, location, props, costumi, comparse, effetti, audio, veicoli;
+- fallback locale se LM Studio restituisce JSON non valido e la riparazione automatica fallisce;
+- normalizzazione dati quando cast, location, props o costumi arrivano incompleti;
+- tab **Piano di lavoro** rinominata e migliorata rispetto al precedente "Piano riprese".
+
+Il **Piano di lavoro** ora permette:
+
+- accorpamento automatico delle scene per location;
+- accorpamento per interno/esterno;
+- accorpamento per gruppo attori;
+- accorpamento per complessita produttiva;
+- spostamento manuale delle scene tra giornate;
+- aggiunta, eliminazione e riordino delle giornate;
+- legenda cast numerata;
+- vista tipo shooting schedule con colonne `Sc.`, `Set`, `I/E`, `Cast ID`, `Shoot location`, `Pages`, `Complessita`;
+- stima in ottavi di pagina;
+- data di inizio e fine riprese;
+- orario giornaliero di inizio e fine;
+- modifica manuale di data e orario per ogni giornata;
+- avviso se il numero di giornate supera la finestra di date impostata.
+
+### Export PDF Operativi
+
+Oltre agli export della sceneggiatura, DeepFrame ora genera PDF stampabili per:
+
+- **Schede Personaggio**;
+- **Schede Location**;
+- **Breakdown Reparti**.
+
+Il pulsante **Esporta PDF** compare nella barra superiore quando si entra nella rispettiva scheda.
 
 ## Funzioni AI
 
@@ -105,7 +175,7 @@ Genera schede utili per location manager, scenografia, regia e fotografia:
 - caratteristiche tecniche
 - allestimento
 - scouting
-- piano riprese
+- piano di lavoro / piano riprese
 - note didattiche
 
 Endpoint:
@@ -125,7 +195,9 @@ Genera un breakdown produttivo per reparti:
 - effetti speciali
 - audio e musica
 - veicoli
-- piano riprese suggerito
+- piano di lavoro suggerito e modificabile
+- calendario riprese
+- export PDF del report
 
 Endpoint:
 
@@ -148,7 +220,7 @@ https://lumina-studio-1033723633880.us-west1.run.app/
 - Riparazione JSON AI: jsonrepair
 - Backend: Cloudflare Worker
 - Hosting: Cloudflare Workers Static Assets
-- AI provider: Anthropic Claude
+- AI provider: Anthropic Claude / LM Studio locale OpenAI-compatible
 
 ## Formati Supportati
 
@@ -166,6 +238,8 @@ Output:
 | --- | --- |
 | `.fountain` | Compatibile con software di sceneggiatura |
 | `.html` | Visualizzazione, stampa o conversione PDF |
+| PDF sceneggiatura | Stampa continua o una scena per pagina |
+| PDF report | Schede personaggio, schede location, breakdown reparti |
 
 ## Configurazione Cloudflare
 

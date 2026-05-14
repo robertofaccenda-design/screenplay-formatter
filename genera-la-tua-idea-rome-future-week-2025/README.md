@@ -1,20 +1,58 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Crea La Tua Storia
 
-# Run and deploy your AI Studio app
+Modulo narrativo collegato a **DeepFrame Script**.
 
-This contains everything you need to run your app locally.
+Questo modulo permette di generare una storia guidata per atti, esportarla e inviarla direttamente alla **Formattazione Creativa** di DeepFrame per trasformarla in sceneggiatura.
 
-View your app in AI Studio: https://ai.studio/apps/27c3ebfb-be14-48b8-991b-116d1f14ef1c
+## Integrazione Con DeepFrame
 
-## Run Locally
+Il modulo viene pubblicato dentro la stessa build di DeepFrame alla rotta:
 
-**Prerequisites:**  Node.js
+```text
+/crea-la-tua-storia/
+```
 
+La home di DeepFrame contiene un collegamento diretto a questa rotta.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Provider AI
+
+Il generatore usa la stessa configurazione AI scelta in DeepFrame:
+
+- **LM Studio locale** quando l'app principale usa LM Studio;
+- **Anthropic Claude Sonnet** quando l'app principale usa Anthropic/Cloudflare.
+
+La chiave API usata e la stessa inserita per parsing e formattazione.
+
+## Funzioni
+
+- Generazione storia per atti.
+- Caricamento di un PDF o documento sorgente.
+- Scelte narrative tra gli atti.
+- Fallback automatico quando il modello non restituisce scelte valide.
+- Pulizia dell'output da markdown tecnico o JSON residuo.
+- Export in PDF.
+- Export in TXT.
+- Invio diretto della storia alla Formattazione Creativa di DeepFrame.
+
+## Note Tecniche
+
+- Il modulo viene compilato con una configurazione Vite dedicata.
+- La build finale viene prodotta dentro:
+
+```text
+dist/crea-la-tua-storia/
+```
+
+- Il comando principale del repository esegue anche questa build:
+
+```bash
+npm run build
+```
+
+## Problemi Gia Gestiti
+
+- Output con blocchi di codice JSON o `scelte_critiche`.
+- Sezioni tipo `Scelte - Matrice JSON` in coda agli atti.
+- Titoli con residui markdown `#`, `##`, `---`.
+- Scelte vuote o non valide prima dell'atto finale.
+- Uso di Haiku sostituito da Sonnet per maggiore qualita narrativa.
