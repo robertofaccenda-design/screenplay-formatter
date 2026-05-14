@@ -1927,6 +1927,32 @@ const normalizeBreakdownExtras = (reparti, perScena) => {
   };
 };
 
+const normalizeBreakdownSummary = (summary, perScena, castItems, locationItems, workPlan) => {
+  const scenes = asArray(perScena);
+  const environments = scenes.map((scene) => getSceneEnvironment(scene));
+  const moments = scenes.map((scene) => String(scene?.momento || "").toUpperCase());
+  const pickCount = (value, fallback) => {
+    const number = Number(value);
+    return number > 0 ? number : fallback;
+  };
+
+  const dayCount = pickCount(summary?.giorni_ripresa_stimati || summary?.giorni_lavoro_stimati, asArray(workPlan).length || Math.max(1, Math.ceil(scenes.length / 4)));
+  const productionComplexity = summary?.complessità_produttiva || strongestComplexity(scenes);
+
+  return {
+    totale_scene: pickCount(summary?.totale_scene, scenes.length),
+    personaggi_parlanti: pickCount(summary?.personaggi_parlanti || summary?.cast_totale, castItems.length),
+    location_uniche: pickCount(summary?.location_uniche, locationItems.length),
+    giorni_ripresa_stimati: dayCount,
+    scene_interne: pickCount(summary?.scene_interne, environments.filter((value) => value.includes("INT")).length),
+    scene_esterne: pickCount(summary?.scene_esterne, environments.filter((value) => value.includes("EST") || value.includes("EXT")).length),
+    scene_giorno: pickCount(summary?.scene_giorno, moments.filter((value) => value.includes("GIORNO") || value.includes("DAY")).length),
+    scene_notte: pickCount(summary?.scene_notte, moments.filter((value) => value.includes("NOTTE") || value.includes("NIGHT")).length),
+    complessità_produttiva: normalizeComplexity(productionComplexity),
+    note_produzione: summary?.note_produzione || summary?.note || "Riepilogo ricostruito automaticamente dai dati del breakdown.",
+  };
+};
+
 const complexityRank = { bassa: 1, media: 2, alta: 3, molto_alta: 4 };
 const complexityHours = { bassa: 2, media: 3, alta: 4, molto_alta: 5 };
 
@@ -2065,6 +2091,7 @@ function BreakdownPanel({ data }) {
   const costumeItems = normalizeBreakdownCostumes(reparti, castItems);
   const extraItems = normalizeBreakdownExtras(reparti, per_scena);
   const extraCount = extraItems.comparse.length + extraItems.effetti.length + extraItems.veicoli.length + extraItems.audio.length;
+  const riepilogoData = normalizeBreakdownSummary(riepilogo, per_scena, castItems, locationItems, workPlan);
 
   const moveWorkDay = (index, direction) => {
     setWorkPlan((current) => {
@@ -2195,18 +2222,18 @@ function BreakdownPanel({ data }) {
       <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
 
         {/* RIEPILOGO */}
-        {activeTab === "riepilogo" && riepilogo && (
+        {activeTab === "riepilogo" && riepilogoData && (
           <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px" }}>
               {[
-                ["🎬", "Scene totali", riepilogo.totale_scene],
-                ["👤", "Personaggi", riepilogo.personaggi_parlanti],
-                ["📍", "Location", riepilogo.location_uniche],
-                ["📅", "Giorni stimati", riepilogo.giorni_ripresa_stimati],
-                ["🏠", "INT", riepilogo.scene_interne],
-                ["🌿", "EST", riepilogo.scene_esterne],
-                ["☀️", "Giorno", riepilogo.scene_giorno],
-                ["🌙", "Notte", riepilogo.scene_notte],
+                ["🎬", "Scene totali", riepilogoData.totale_scene],
+                ["👤", "Personaggi", riepilogoData.personaggi_parlanti],
+                ["📍", "Location", riepilogoData.location_uniche],
+                ["📅", "Giorni stimati", riepilogoData.giorni_ripresa_stimati],
+                ["🏠", "INT", riepilogoData.scene_interne],
+                ["🌿", "EST", riepilogoData.scene_esterne],
+                ["☀️", "Giorno", riepilogoData.scene_giorno],
+                ["🌙", "Notte", riepilogoData.scene_notte],
               ].map(([icon, label, val]) => (
                 <div key={label} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: "8px", padding: "12px", textAlign: "center" }}>
                   <div style={{ fontSize: "20px", marginBottom: "4px" }}>{icon}</div>
@@ -2217,12 +2244,12 @@ function BreakdownPanel({ data }) {
             </div>
             <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
               <span style={{ fontSize: "12px", color: "#888", fontFamily: "sans-serif" }}>Complessità produttiva</span>
-              <Badge label={riepilogo.complessità_produttiva?.replace(/_/g, " ").toUpperCase()} color={complessitàProdColors[riepilogo.complessità_produttiva]} />
+              <Badge label={riepilogoData.complessità_produttiva.replace(/_/g, " ").toUpperCase()} color={complessitàProdColors[riepilogoData.complessità_produttiva]} />
             </div>
-            {riepilogo.note_produzione && (
+            {riepilogoData.note_produzione && (
               <div style={{ background: "rgba(255,143,101,.06)", border: "1px solid rgba(255,143,101,.2)", borderRadius: "8px", padding: "14px 16px" }}>
                 <div style={{ fontSize: "10px", color: "#FF8A65", fontFamily: "sans-serif", fontWeight: "bold", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "1px" }}>📋 Note di produzione</div>
-                <div style={{ fontSize: "13px", color: "#ccc", fontFamily: "Georgia, serif", lineHeight: "1.8" }}>{riepilogo.note_produzione}</div>
+                <div style={{ fontSize: "13px", color: "#ccc", fontFamily: "Georgia, serif", lineHeight: "1.8" }}>{riepilogoData.note_produzione}</div>
               </div>
             )}
           </div>
