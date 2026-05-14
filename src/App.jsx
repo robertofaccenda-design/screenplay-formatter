@@ -1959,6 +1959,18 @@ const getSceneCastKey = (scene) => {
   return cast.length ? cast.join(", ") : "Scene senza cast indicato";
 };
 
+const estimateSceneEighths = (scene) => {
+  const explicit = Number(scene?.ottavi_pagina || scene?.eighths || scene?.page_eighths);
+  if (explicit > 0) return Math.max(1, Math.round(explicit));
+  const pages = Number(scene?.pagine || scene?.pages);
+  if (pages > 0) return Math.max(1, Math.round(pages * 8));
+  const complexity = normalizeComplexity(scene?.complessità);
+  const base = { bassa: 2, media: 3, alta: 4, molto_alta: 5 }[complexity] || 3;
+  const castExtra = asArray(scene?.cast).length >= 5 ? 1 : 0;
+  const specialExtra = asArray(scene?.elementi_speciali).length > 0 ? 1 : 0;
+  return Math.min(8, base + castExtra + specialExtra);
+};
+
 const sceneNumbersFromDay = (day) => (
   uniq(sceneList(day?.scene_consigliate || day?.scene).map((value) => Number(value)).filter(Boolean))
 );
@@ -2047,6 +2059,7 @@ function BreakdownPanel({ data }) {
   const { riepilogo, per_scena, reparti } = data;
   const sceneByNumber = new Map(asArray(per_scena).map((scene) => [Number(scene.numero), scene]));
   const castItems = normalizeBreakdownCast(reparti, per_scena);
+  const castIdByName = new Map(castItems.map((cast, index) => [String(cast.nome || "").trim().toUpperCase(), index + 1]));
   const locationItems = normalizeBreakdownLocations(reparti, per_scena);
   const propItems = normalizeBreakdownProps(reparti, per_scena);
   const costumeItems = normalizeBreakdownCostumes(reparti, castItems);
@@ -2079,6 +2092,21 @@ function BreakdownPanel({ data }) {
   const getWorkDayComplexity = (day) => (
     day.complessità_massima || strongestComplexity(sceneNumbersFromDay(day).map((number) => sceneByNumber.get(number)).filter(Boolean))
   );
+
+  const getWorkDayScenes = (day) => sceneNumbersFromDay(day).map((number) => sceneByNumber.get(number)).filter(Boolean);
+
+  const getSceneCastIds = (scene) => asArray(scene?.cast)
+    .map((name) => castIdByName.get(String(name || "").trim().toUpperCase()))
+    .filter(Boolean);
+
+  const getWorkDayCastIds = (day) => uniq(getWorkDayScenes(day).flatMap((scene) => getSceneCastIds(scene)));
+
+  const getWorkDayPageEighths = (day) => getWorkDayScenes(day)
+    .reduce((sum, scene) => sum + estimateSceneEighths(scene), 0);
+
+  const getWorkDayLocations = (day) => uniq(getWorkDayScenes(day).map((scene) => getSceneLocation(scene))).join(", ") || "Location da definire";
+
+  const getWorkDayTime = (day) => day.orario || [day.ora_inizio, day.ora_fine].filter(Boolean).join(" - ") || "10:00 - 18:00";
 
   const applyWorkPlanStrategy = (strategy) => {
     setWorkPlan(buildWorkPlanFromScenes(per_scena, strategy));
@@ -2423,16 +2451,48 @@ function BreakdownPanel({ data }) {
             {workPlan.length === 0 && (
               <EmptyBreakdownSection label="piano di lavoro. Usa un criterio di accorpamento o aggiungi una giornata manuale" />
             )}
+            {castItems.length > 0 && (
+              <div style={{ background: "rgba(255,255,255,.025)", border: "1px solid rgba(255,255,255,.06)", borderRadius: "8px", padding: "12px 14px" }}>
+                <div style={{ fontSize: "11px", color: "#888", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px" }}>Legenda cast</div>
+                <div style={{ display: "flex", gap: "7px", flexWrap: "wrap" }}>
+                  {castItems.map((cast, castIndex) => (
+                    <span key={`${cast.nome}-${castIndex}`} style={{ display: "inline-flex", gap: "6px", alignItems: "center", padding: "3px 8px", borderRadius: "16px", background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.08)", fontSize: "10px", fontFamily: "sans-serif", color: "#aaa" }}>
+                      <strong style={{ color: "#ddd" }}>{castIndex + 1}</strong>
+                      {cast.nome}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             {workPlan.map((g, index) => (
-              <div key={`${g.giorno}-${index}`} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: "8px", padding: "14px 16px" }}>
-                <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "10px", flexWrap: "wrap" }}>
-                  <div style={{ background: "linear-gradient(135deg,#c8a96e,#b8994e)", borderRadius: "6px", padding: "6px 12px", fontSize: "13px", fontWeight: "bold", fontFamily: "sans-serif", color: "#0a0a0f" }}>
-                    Giorno {g.giorno}
+              <div key={`${g.giorno}-${index}`} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: "8px", overflow: "hidden" }}>
+                <div style={{ background: "rgba(13,15,25,.92)", borderBottom: "1px solid rgba(255,255,255,.08)", padding: "12px 16px", display: "grid", gridTemplateColumns: "86px 1fr auto", gap: "14px", alignItems: "center" }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(200,169,110,.12)", border: "1px solid rgba(200,169,110,.25)", borderRadius: "6px", minHeight: "58px" }}>
+                    <span style={{ fontSize: "10px", color: "#c8a96e", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px" }}>Giorno</span>
+                    <span style={{ fontSize: "24px", color: "#f2dfb8", fontFamily: "sans-serif", fontWeight: "bold", lineHeight: 1 }}>{g.giorno}</span>
+                    <span style={{ fontSize: "9px", color: "#777", fontFamily: "sans-serif" }}>di {workPlan.length}</span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "7px", minWidth: 0 }}>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: "13px", color: "#ddd", fontFamily: "sans-serif", fontWeight: "bold" }}>{g.data || g.date || "Data da definire"}</span>
+                      <Badge label={getWorkDayTime(g)} color="#4FC3F7" small />
+                      <Badge label={`${sceneNumbersFromDay(g).length} scene`} color="#c8a96e" small />
+                      <Badge label={formatPageEighths(getWorkDayPageEighths(g))} color="#FFD54F" small />
+                      <Badge label={`Cast ${getWorkDayCastIds(g).join(", ") || "n/d"}`} color="#CE93D8" small />
+                      <Badge label={getWorkDayComplexity(g).replace(/_/g, " ")} color={complessitàProdColors[getWorkDayComplexity(g)] || "#888"} small />
+                    </div>
+                    <div style={{ fontSize: "11px", color: "#888", fontFamily: "sans-serif", overflowWrap: "anywhere" }}>
+                      Location riprese: <span style={{ color: "#bbb" }}>{getWorkDayLocations(g)}</span>
+                    </div>
                   </div>
                   <div style={{ display: "flex", gap: "4px" }}>
                     <button onClick={() => moveWorkDay(index, -1)} disabled={index === 0} style={{ padding: "4px 8px", borderRadius: "5px", border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.05)", color: index === 0 ? "#444" : "#ddd", cursor: index === 0 ? "not-allowed" : "pointer" }}>↑</button>
                     <button onClick={() => moveWorkDay(index, 1)} disabled={index === workPlan.length - 1} style={{ padding: "4px 8px", borderRadius: "5px", border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.05)", color: index === workPlan.length - 1 ? "#444" : "#ddd", cursor: index === workPlan.length - 1 ? "not-allowed" : "pointer" }}>↓</button>
+                    <button onClick={() => removeWorkDay(index)} style={{ padding: "4px 8px", borderRadius: "5px", border: "1px solid rgba(255,107,107,.18)", background: "rgba(255,107,107,.06)", color: "#FF6B6B", cursor: "pointer", fontSize: "11px", fontFamily: "sans-serif" }}>Elimina</button>
                   </div>
+                </div>
+                <div style={{ padding: "12px 16px 14px" }}>
+                  <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "10px", flexWrap: "wrap" }}>
                   <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                     {sceneNumbersFromDay(g).map(sc => (
                       <span key={sc} style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "1px 6px", borderRadius: "20px", fontSize: "10px", fontFamily: "sans-serif", background: "rgba(200,169,110,.13)", color: "#c8a96e", border: "1px solid rgba(200,169,110,.28)", whiteSpace: "nowrap" }}>
@@ -2441,25 +2501,38 @@ function BreakdownPanel({ data }) {
                       </span>
                     ))}
                   </div>
-                  <Badge label={getWorkDayComplexity(g).replace(/_/g, " ")} color={complessitàProdColors[getWorkDayComplexity(g)] || "#888"} small />
                   <span style={{ marginLeft: "auto", fontSize: "11px", color: "#888", fontFamily: "sans-serif" }}>~{g.ore_stimate}h</span>
-                  <button onClick={() => removeWorkDay(index)} style={{ padding: "4px 8px", borderRadius: "5px", border: "1px solid rgba(255,107,107,.18)", background: "rgba(255,107,107,.06)", color: "#FF6B6B", cursor: "pointer", fontSize: "11px", fontFamily: "sans-serif" }}>Elimina</button>
                 </div>
                 <div style={{ fontSize: "12px", color: "#aaa", fontFamily: "sans-serif", lineHeight: "1.5", fontStyle: "italic" }}>{g.motivazione}</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "10px" }}>
+                <div style={{ marginTop: "12px", border: "1px solid rgba(255,255,255,.06)", borderRadius: "6px", overflow: "hidden" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "52px minmax(160px, 1.2fr) 70px 90px minmax(120px, 1fr) 72px 86px", gap: "8px", alignItems: "center", padding: "7px 10px", background: "rgba(255,255,255,.055)", fontSize: "10px", color: "#777", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: ".8px" }}>
+                    <span>Sc.</span>
+                    <span>Set</span>
+                    <span>I/E</span>
+                    <span>Cast ID</span>
+                    <span>Shoot location</span>
+                    <span>Pages</span>
+                    <span>Complessità</span>
+                  </div>
                   {sceneNumbersFromDay(g).map((number) => {
                     const scene = sceneByNumber.get(number);
                     if (!scene) return null;
                     return (
-                      <div key={number} style={{ display: "grid", gridTemplateColumns: "54px minmax(160px, 1fr) 80px minmax(120px, 1fr) 70px", gap: "8px", alignItems: "center", padding: "8px 10px", background: "rgba(255,255,255,.025)", border: "1px solid rgba(255,255,255,.05)", borderRadius: "6px" }}>
+                      <div key={number} style={{ display: "grid", gridTemplateColumns: "52px minmax(160px, 1.2fr) 70px 90px minmax(120px, 1fr) 72px 86px", gap: "8px", alignItems: "center", padding: "8px 10px", background: "rgba(255,255,255,.025)", borderTop: "1px solid rgba(255,255,255,.045)" }}>
                         <span style={{ fontSize: "11px", color: "#c8a96e", fontFamily: "monospace" }}>Sc.{number}</span>
-                        <span style={{ fontSize: "12px", color: "#ddd", fontFamily: "sans-serif", overflowWrap: "anywhere" }}>{getSceneLocation(scene)}</span>
+                        <span style={{ fontSize: "12px", color: "#ddd", fontFamily: "sans-serif", overflowWrap: "anywhere" }}>
+                          <strong style={{ display: "block", color: "#ddd", fontSize: "12px", marginBottom: "2px" }}>{getSceneLocation(scene)}</strong>
+                          <span style={{ color: "#777", fontSize: "10px", lineHeight: "1.35" }}>{scene.note_regia || scene.titolo || "Descrizione da definire"}</span>
+                        </span>
                         <Badge label={getSceneEnvironment(scene)} color="#4FC3F7" small />
-                        <span style={{ fontSize: "11px", color: "#888", fontFamily: "sans-serif", overflowWrap: "anywhere" }}>{asArray(scene.cast).join(", ") || "cast da definire"}</span>
+                        <span style={{ fontSize: "11px", color: "#CE93D8", fontFamily: "monospace" }}>{getSceneCastIds(scene).join(", ") || "n/d"}</span>
+                        <span style={{ fontSize: "11px", color: "#aaa", fontFamily: "sans-serif", overflowWrap: "anywhere" }}>{getSceneLocation(scene)}</span>
+                        <span style={{ fontSize: "11px", color: "#FFD54F", fontFamily: "monospace" }}>{formatPageEighths(estimateSceneEighths(scene))}</span>
                         <Badge label={normalizeComplexity(scene.complessità).replace(/_/g, " ")} color={complessitàProdColors[normalizeComplexity(scene.complessità)] || "#888"} small />
                       </div>
                     );
                   })}
+                </div>
                 </div>
               </div>
             ))}
