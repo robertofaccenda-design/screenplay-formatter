@@ -36,16 +36,18 @@ const typeColors = {
 };
 
 const LOCAL_FORMAT_PROMPTS = {
-  creative: `Sei un esperto di sceneggiatura cinematografica professionale italiana e internazionale. Analizza un testo grezzo e restituisci ESCLUSIVAMENTE un array JSON valido con elementi di sceneggiatura.
+  creative: `Sei un esperto sceneggiatore cinematografico e story editor. Trasforma un testo narrativo grezzo, una storia generata o un documento sorgente in una sceneggiatura cinematografica piu ricca e sviluppata. Restituisci ESCLUSIVAMENTE un array JSON valido con elementi di sceneggiatura.
 
 Tipi ammessi: "scene_heading", "action", "character", "parenthetical", "dialogue", "transition", "title", "blank".
 
 Regole:
-- Correggi errori ortografici e grammaticali minimi.
-- Mantieni la lingua originale.
-- Inferisci il tipo dal contesto.
-- Puoi aggiungere intestazioni di scena mancanti solo quando il contesto le rende necessarie.
-- Non inventare contenuto narrativo.
+- Espandi creativamente il materiale: aggiungi azioni visive, atmosfera, dettagli d'ambiente, micro-conflitti e passaggi di raccordo.
+- Crea dialoghi nuovi quando aiutano a drammatizzare la scena, mantenendo coerenza con personaggi, tono e tema del testo di partenza.
+- Se il testo nasce da "Crea la tua storia" o da un PDF narrativo, adattalo in scene cinematografiche complete invece di limitarti a riclassificarlo.
+- Mantieni la lingua originale e non cambiare il nucleo della storia.
+- Inferisci personaggi, luoghi e scene dal contesto.
+- Aggiungi intestazioni di scena INT./EST. quando servono per costruire una sceneggiatura leggibile.
+- Usa il presente indicativo e uno stile visivo, concreto, cinematografico.
 - Ogni elemento deve avere: { "type": "<tipo>", "content": "<testo>" }.
 
 Restituisci SOLO l'array JSON, senza markdown, senza spiegazioni.`,
@@ -2197,8 +2199,10 @@ export default function App() {
         }
         const data = await postAiJson(API_FORMAT, { text, mode }, {
           system: LOCAL_FORMAT_PROMPTS[mode] || LOCAL_FORMAT_PROMPTS.creative,
-          user: `${mode === "conservative" ? "Classifica in modo conservativo" : "Analizza e formatta"} il seguente frammento come sceneggiatura cinematografica professionale. Restituisci solo gli elementi ricavati da questo frammento, senza riassumere i frammenti precedenti o successivi:\n\n${text}`,
-          temperature: mode === "conservative" ? 0 : 0.2,
+          user: mode === "conservative"
+            ? `Classifica in modo conservativo il seguente frammento come sceneggiatura cinematografica professionale. Restituisci solo gli elementi ricavati da questo frammento, senza riassumere i frammenti precedenti o successivi:\n\n${text}`
+            : `Adatta ed espandi creativamente il seguente frammento in sceneggiatura cinematografica professionale. Aggiungi materiale nuovo coerente: azioni, dialoghi, dettagli visivi, tensione e raccordi. Restituisci solo gli elementi della sceneggiatura generati da questo frammento, senza spiegazioni:\n\n${text}`,
+          temperature: mode === "conservative" ? 0 : 0.65,
           output: "array",
         });
         return normalizeElementsPayload(data, isLocalAi);

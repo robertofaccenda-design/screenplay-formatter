@@ -1,7 +1,7 @@
 // Cloudflare Worker for API routes when deploying to workers.dev with static assets.
 import { jsonrepair } from "jsonrepair";
 
-const CREATIVE_FORMAT_SYSTEM_PROMPT = `Sei un esperto di sceneggiatura cinematografica professionale italiana e internazionale. Il tuo compito è analizzare un testo grezzo non formattato e restituire ESCLUSIVAMENTE un array JSON valido con gli elementi della sceneggiatura classificati e corretti.
+const CREATIVE_FORMAT_SYSTEM_PROMPT = `Sei un esperto sceneggiatore cinematografico, script doctor e story editor. Il tuo compito è trasformare un testo grezzo, una storia generata o un documento sorgente in una sceneggiatura cinematografica piu ricca, drammatizzata e sviluppata. Restituisci ESCLUSIVAMENTE un array JSON valido con gli elementi della sceneggiatura.
 
 REGOLE DI CLASSIFICAZIONE:
 - "scene_heading": intestazioni di scena. Iniziano con INT., EST., INT./EST. o equivalenti. Mettile SEMPRE in MAIUSCOLO. Formato: INT./EST. LUOGO - GIORNO/NOTTE/ALBA/TRAMONTO
@@ -13,13 +13,15 @@ REGOLE DI CLASSIFICAZIONE:
 - "title": titolo del film o del progetto, se presente all'inizio.
 - "blank": riga vuota di separazione (content: "")
 
-REGOLE DI CORREZIONE:
-- Correggi errori ortografici e grammaticali in italiano
-- Mantieni la lingua originale del testo (italiano o inglese)
-- Inferisci il tipo di elemento dal contesto anche se non è esplicitamente segnalato
-- Se una riga sembra un nome di personaggio prima di un dialogo, classificala come "character"
-- Aggiungi intestazioni di scena mancanti se il contesto lo richiede
-- Non inventare contenuto narrativo: solo riclassifica e correggi quello esistente
+REGOLE DI ADATTAMENTO CREATIVO:
+- Espandi creativamente il materiale di partenza: aggiungi azioni visive, atmosfera, dettagli d'ambiente, micro-conflitti, raccordi e ritmo scenico.
+- Crea dialoghi nuovi quando servono a rendere la scena drammatica, comprensibile e cinematografica.
+- Se il testo nasce da "Crea la tua storia" o da un PDF narrativo, trasformalo in scene compiute invece di limitarti a riclassificarlo.
+- Mantieni la lingua originale e non tradire il nucleo della storia, i personaggi, il tono e il tema.
+- Inferisci personaggi, luoghi e scene dal contesto anche se non sono esplicitamente segnalati.
+- Aggiungi intestazioni di scena INT./EST. quando servono per costruire una sceneggiatura leggibile.
+- Scrivi le azioni in presente indicativo, in stile visivo, concreto e cinematografico.
+- Correggi errori ortografici e grammaticali in italiano.
 
 OUTPUT: Restituisci SOLO l'array JSON, senza markdown, senza backtick, senza spiegazioni.`;
 
@@ -652,11 +654,14 @@ const handleFormat = async (request, env) => {
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 8000,
+        temperature: mode === "conservative" ? 0 : 0.65,
         system: getFormatSystemPrompt(mode),
         messages: [
           {
             role: "user",
-            content: `${mode === "conservative" ? "Classifica in modo conservativo" : "Analizza e formatta"} il seguente testo come sceneggiatura cinematografica professionale:\n\n${text}`,
+            content: mode === "conservative"
+              ? `Classifica in modo conservativo il seguente testo come sceneggiatura cinematografica professionale:\n\n${text}`
+              : `Adatta ed espandi creativamente il seguente testo in sceneggiatura cinematografica professionale. Aggiungi materiale nuovo coerente: azioni, dialoghi, dettagli visivi, tensione, raccordi e sviluppo drammaturgico. Non limitarti a riclassificare: costruisci una scena o sequenza piu completa a partire dal documento:\n\n${text}`,
           },
         ],
       }),
