@@ -4,6 +4,14 @@ import type { Character } from '../types';
 const API_STORY = '/api/story';
 const ANTHROPIC_KEY_STORAGE = 'screenplayFormatter.anthropicApiKey';
 const ANTHROPIC_SESSION_KEY_STORAGE = 'screenplayFormatter.anthropicApiKey.session';
+const AI_PROVIDER_STORAGE = 'screenplayFormatter.aiProvider';
+const LM_STUDIO_ENDPOINT_STORAGE = 'screenplayFormatter.lmStudioEndpoint';
+const LM_STUDIO_MODEL_STORAGE = 'screenplayFormatter.lmStudioModel';
+const DIRECT_LM_STUDIO_ENDPOINT = 'http://127.0.0.1:1234/v1/chat/completions';
+const LOCAL_PROXY_LM_STUDIO_ENDPOINT = '/lmstudio/v1/chat/completions';
+const isLocalAppHost = ['localhost', '127.0.0.1'].includes(globalThis.location?.hostname);
+const DEFAULT_LM_STUDIO_ENDPOINT = isLocalAppHost ? LOCAL_PROXY_LM_STUDIO_ENDPOINT : DIRECT_LM_STUDIO_ENDPOINT;
+const DEFAULT_LM_STUDIO_MODEL = 'gemma-4';
 
 const getActSystemInstruction = (act: number, narrativeStructure: string, narrativeTone: string): string => {
   let baseInstruction = `Sei un narratore educativo e creativo per studenti di scuola media (11-14 anni). Le tue storie sono coinvolgenti e inseriscono in modo sottile fatti educativi. Il tuo tono è ${narrativeTone}, incoraggiante e stimolante. Mantieni la coerenza con i personaggi principali definiti nel prompt e assicurati di coinvolgerli attivamente nella narrazione, non solo il protagonista. La parte della storia dovrebbe essere di circa 150 parole.`;
@@ -65,6 +73,14 @@ const cleanStoryText = (text: string): string => text
   .replace(/json\s*scelte_avventura\s*$/i, '')
   .replace(/json\s*:?\s*$/i, '')
   .trim();
+
+const extractLmStudioContent = (data: any): string => {
+  const content = data?.choices?.[0]?.message?.content || data?.choices?.[0]?.text || '';
+  if (Array.isArray(content)) {
+    return content.map((item) => item?.text || '').join('\n').trim();
+  }
+  return typeof content === 'string' ? content.trim() : '';
+};
 
 /**
  * Parses the AI response to extract the story text and the choices array.
@@ -157,6 +173,39 @@ export const generateStoryPart = async (prompt: string, storyHistory: string, ac
     : `Inizia una storia basata su queste indicazioni: ${prompt}. La storia deve essere educativa per studenti di scuola media e seguire la struttura narrativa scelta.`;
 
   const systemInstruction = getActSystemInstruction(act, narrativeStructure, narrativeTone);
+  const aiProvider = localStorage.getItem(AI_PROVIDER_STORAGE) || 'anthropic';
+  if (aiProvider === 'lmstudio') {
+    const endpoint = localStorage.getItem(LM_STUDIO_ENDPOINT_STORAGE)?.trim() || DEFAULT_LM_STUDIO_ENDPOINT;
+    const model = localStorage.getItem(LM_STUDIO_MODEL_STORAGE)?.trim() || DEFAULT_LM_STUDIO_MODEL;
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: systemInstruction },
+            { role: 'user', content: fullPrompt },
+          ],
+          temperature: 0.7,
+          stream: false,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error?.message || data.message || 'LM Studio ha rifiutato la richiesta. Controlla che il modello sia caricato.');
+      }
+      const content = extractLmStudioContent(data);
+      if (!content) throw new Error('LM Studio ha risposto senza contenuto.');
+      return parseStoryResponse(content, act);
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`LM Studio locale non raggiungibile o risposta non valida: ${error.message}`);
+      }
+      throw new Error('LM Studio locale non raggiungibile. Avvia il server OpenAI-compatible e riprova.');
+    }
+  }
+
   const savedApiKey = sessionStorage.getItem(ANTHROPIC_SESSION_KEY_STORAGE)
     || localStorage.getItem(ANTHROPIC_KEY_STORAGE)
     || '';
