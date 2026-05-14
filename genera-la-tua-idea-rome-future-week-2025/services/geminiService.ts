@@ -134,6 +134,7 @@ const parseStoryResponse = (responseText: string, act: number): StoryGenerationR
       ? parsedChoices
       : parsedChoices?.scelte_critiche || parsedChoices?.choices || parsedChoices?.scelte;
     if (!Array.isArray(choicesData)) {
+      if (act < 5) return { storyText, choices: getFallbackChoices(act) };
       throw new Error("Le scelte non sono una matrice valida o la matrice è vuota prima dell'atto finale.");
     }
     
@@ -169,6 +170,7 @@ const parseStoryResponse = (responseText: string, act: number): StoryGenerationR
 
     return { storyText, choices };
   } catch (error) {
+    if (act < 5) return { storyText, choices: getFallbackChoices(act) };
     console.error("Errore nel parsing delle scelte JSON:", choicesJson);
     if (error instanceof Error) {
         throw new Error(`Impossibile analizzare le scelte fornite dall'IA. Dettagli: ${error.message}`);

@@ -449,11 +449,18 @@ const parseStoryResponse = (responseText, act) => {
 
   const storyText = cleanStoryText(responseText.slice(0, jsonStartIndex));
 
-  const parsedChoices = JSON.parse(jsonrepair(choicesJson));
+  let parsedChoices;
+  try {
+    parsedChoices = JSON.parse(jsonrepair(choicesJson));
+  } catch {
+    if (act < 5) return { storyText, choices: getFallbackStoryChoices(act) };
+    throw new Error("Le scelte non sono valide o sono vuote prima dell'atto finale.");
+  }
   const choicesData = Array.isArray(parsedChoices)
     ? parsedChoices
     : parsedChoices?.scelte_critiche || parsedChoices?.choices || parsedChoices?.scelte;
   if (!Array.isArray(choicesData)) {
+    if (act < 5) return { storyText, choices: getFallbackStoryChoices(act) };
     throw new Error("Le scelte non sono valide o sono vuote prima dell'atto finale.");
   }
 
