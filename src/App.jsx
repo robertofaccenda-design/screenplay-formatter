@@ -2124,13 +2124,12 @@ export default function App() {
     try {
       return cleanAiJson(content);
     } catch (parseError) {
-      if (output === "array") {
-        throw new Error(`LM Studio ha generato JSON non valido: ${parseError.message}`);
-      }
       const { res: repairResponse, payload: repairData } = await sendRequest([
           {
             role: "system",
-            content: "Sei un validatore JSON. Correggi la sintassi del testo ricevuto e restituisci SOLO un oggetto JSON valido, senza markdown e senza spiegazioni. Non aggiungere nuove informazioni: ripara solo virgolette, virgole, due punti, parentesi e wrapper.",
+            content: output === "array"
+              ? "Sei un validatore JSON. Correggi la sintassi del testo ricevuto e restituisci SOLO un array JSON valido, senza markdown e senza spiegazioni. Non aggiungere nuove informazioni: ripara solo virgolette, virgole, due punti, parentesi quadre/graffe e wrapper. Ogni elemento deve essere un oggetto con type e content."
+              : "Sei un validatore JSON. Correggi la sintassi del testo ricevuto e restituisci SOLO un oggetto JSON valido, senza markdown e senza spiegazioni. Non aggiungere nuove informazioni: ripara solo virgolette, virgole, due punti, parentesi e wrapper.",
           },
           {
             role: "user",
