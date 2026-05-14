@@ -494,6 +494,81 @@ const escapeHtml = (value) => String(value)
   .replace(/"/g, "&quot;")
   .replace(/'/g, "&#039;");
 
+const humanizeReportKey = (key) => String(key || "")
+  .replace(/_/g, " ")
+  .replace(/([a-z])([A-Z])/g, "$1 $2")
+  .replace(/\s+/g, " ")
+  .trim()
+  .replace(/^./, (char) => char.toUpperCase());
+
+const isPlainReportObject = (value) => (
+  value && typeof value === "object" && !Array.isArray(value)
+);
+
+const renderReportValue = (value, depth = 0) => {
+  if (value === null || value === undefined || value === "" || value === "non_specificato") {
+    return "<span class=\"muted\">non specificato</span>";
+  }
+  if (typeof value === "boolean") return value ? "Si" : "No";
+  if (typeof value !== "object") return escapeHtml(value);
+
+  if (Array.isArray(value)) {
+    if (!value.length) return "<span class=\"muted\">nessuna voce</span>";
+    if (value.every((item) => !isPlainReportObject(item) && !Array.isArray(item))) {
+      return `<div class="chips">${value.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>`;
+    }
+    if (value.every(isPlainReportObject)) {
+      const keys = [...new Set(value.flatMap((item) => Object.keys(item)).filter((key) => !isPlainReportObject(value.find((item) => item?.[key])?.[key])))].slice(0, 8);
+      if (keys.length && value.length <= 80) {
+        return `<table><thead><tr>${keys.map((key) => `<th>${escapeHtml(humanizeReportKey(key))}</th>`).join("")}</tr></thead><tbody>${value.map((item) => (
+          `<tr>${keys.map((key) => `<td>${renderReportValue(item[key], depth + 1)}</td>`).join("")}</tr>`
+        )).join("")}</tbody></table>`;
+      }
+    }
+    return value.map((item, index) => (
+      `<div class="card"><h${Math.min(4, depth + 3)}>Voce ${index + 1}</h${Math.min(4, depth + 3)}>${renderReportValue(item, depth + 1)}</div>`
+    )).join("");
+  }
+
+  return Object.entries(value).map(([key, item]) => {
+    const nested = isPlainReportObject(item) || Array.isArray(item);
+    return nested
+      ? `<section class="subsection"><h${Math.min(4, depth + 3)}>${escapeHtml(humanizeReportKey(key))}</h${Math.min(4, depth + 3)}>${renderReportValue(item, depth + 1)}</section>`
+      : `<div class="row"><strong>${escapeHtml(humanizeReportKey(key))}</strong><span>${renderReportValue(item, depth + 1)}</span></div>`;
+  }).join("");
+};
+
+const buildReportPrintHtml = (title, data) => `<!DOCTYPE html>
+<html lang="it"><head><meta charset="UTF-8"><title>${escapeHtml(title)}</title>
+<style>
+  @page{size:A4;margin:16mm 14mm}
+  *{box-sizing:border-box}
+  body{font-family:Arial,Helvetica,sans-serif;color:#151515;background:#fff;font-size:10.5pt;line-height:1.45;margin:0}
+  h1{font-size:22pt;margin:0 0 4mm;border-bottom:2px solid #111;padding-bottom:4mm}
+  h2{font-size:15pt;margin:8mm 0 3mm;break-after:avoid}
+  h3{font-size:12pt;margin:5mm 0 2mm;color:#333;break-after:avoid}
+  h4{font-size:10.5pt;margin:4mm 0 2mm;color:#555;break-after:avoid}
+  .meta{font-size:8.5pt;color:#666;margin-bottom:8mm}
+  section{break-inside:avoid-page}
+  .subsection{margin:3mm 0 5mm}
+  .card{border:1px solid #d7d7d7;border-radius:5px;padding:4mm;margin:3mm 0;break-inside:avoid}
+  .row{display:grid;grid-template-columns:42mm 1fr;gap:4mm;border-bottom:1px solid #eee;padding:2mm 0}
+  .row strong{font-size:8.5pt;color:#555}
+  .muted{color:#999;font-style:italic}
+  .chips{display:flex;gap:2mm;flex-wrap:wrap}
+  .chips span{border:1px solid #ddd;border-radius:10px;padding:1mm 2.4mm;background:#f7f7f7}
+  table{width:100%;border-collapse:collapse;margin:3mm 0;break-inside:auto}
+  th,td{border:1px solid #ddd;padding:2mm;vertical-align:top;text-align:left}
+  th{background:#f0f0f0;font-size:8pt;text-transform:uppercase;letter-spacing:.03em}
+  td{font-size:8.5pt}
+  tr{break-inside:avoid}
+</style></head><body>
+<h1>${escapeHtml(title)}</h1>
+<div class="meta">Esportato da DeepFrame · ${new Date().toLocaleString("it-IT")}</div>
+${renderReportValue(data)}
+<script>window.addEventListener("load",()=>{window.focus();window.print();});</script>
+</body></html>`;
+
 const estimateElementLines = (element) => {
   const content = String(element?.content || "");
   const lineWidth = element?.type === "dialogue" || element?.type === "parenthetical" ? 34 : 58;
@@ -3020,6 +3095,18 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
     openPdfPrint({ scenePageBreaks: true });
   };
 
+  const exportReportPdf = (title, data) => {
+    if (!data) return;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      setError("Il browser ha bloccato l'apertura della finestra PDF. Abilita i popup per esportare in PDF.");
+      return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(buildReportPrintHtml(title, data));
+    printWindow.document.close();
+  };
+
   const busy            = loading || analyzing || loadingSheets || loadingBreakdown || loadingLocations;
   const canFormat       = rawText.trim().length > 10 && !busy;
   const canAnalyze      = !!elements && !busy;
@@ -3333,6 +3420,26 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
               {locationSheets && tabBtn("locations", "Location", activeTab === "locations")}
             {tabBtn("lumina", "Luci 3D", activeTab === "lumina")}
           </div>
+
+          {!busy && (
+            <>
+              {activeTab === "schede" && characterSheets && (
+                <div style={{ padding: "10px 24px", borderBottom: "1px solid rgba(255,255,255,.05)", display: "flex", justifyContent: "flex-end" }}>
+                  <button style={s.btnSec} onClick={() => exportReportPdf("Schede personaggio", characterSheets)}>Esporta PDF</button>
+                </div>
+              )}
+              {activeTab === "breakdown" && breakdown && (
+                <div style={{ padding: "10px 24px", borderBottom: "1px solid rgba(255,255,255,.05)", display: "flex", justifyContent: "flex-end" }}>
+                  <button style={s.btnSec} onClick={() => exportReportPdf("Breakdown reparti", breakdown)}>Esporta PDF</button>
+                </div>
+              )}
+              {activeTab === "locations" && locationSheets && (
+                <div style={{ padding: "10px 24px", borderBottom: "1px solid rgba(255,255,255,.05)", display: "flex", justifyContent: "flex-end" }}>
+                  <button style={s.btnSec} onClick={() => exportReportPdf("Schede location", locationSheets)}>Esporta PDF</button>
+                </div>
+              )}
+            </>
+          )}
 
           <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
             {/* Loading formattazione */}
