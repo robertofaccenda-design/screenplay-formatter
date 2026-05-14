@@ -833,20 +833,25 @@ function OnboardingLanding({ onStart }) {
   }, []);
 
   const featureRows = [
-    ["Script Intelligence", "Analisi narrativa, parsing automatico e sviluppo creativo della sceneggiatura."],
-    ["Direction Tools", "Shotlist, visual storytelling e supporto registico avanzato."],
-    ["Production Workflow", "Breakdown, continuity e organizzazione creativa della produzione."],
-    ["Education", "Strumenti dedicati a scuole, accademie e formazione audiovisiva."],
+    ["Crea la tua storia", "Generatore narrativo integrato: crea una storia per atti, esportala in PDF/TXT o mandala alla formattazione creativa."],
+    ["Formattazione creativa", "Trasforma bozze, PDF narrativi e storie generate in sceneggiature piu ricche, con parsing scene corretto e ottavi pagina."],
+    ["AI flessibile", "Lavora con Anthropic Claude Sonnet o con LM Studio locale usando la stessa configurazione del parsing."],
+    ["Breakdown reparti", "Cast, location, props, costumi, comparse, effetti, audio, veicoli e riepilogo sempre ricostruito dai dati disponibili."],
+    ["Piano di lavoro", "Accorpa scene per location, INT/EST, cast o complessita; sposta manualmente scene e riordina le giornate."],
+    ["Calendario riprese", "Definisci data inizio/fine, orari di lavoro e date specifiche per ogni giornata di produzione."],
+    ["Export professionali", "Esporta sceneggiatura, schede personaggio, schede location e breakdown reparti in PDF stampabile."],
+    ["Luci 3D", "Accedi a Lumina Studio direttamente dentro DeepFrame per simulare setup luce e ragionare visivamente sulle scene."],
   ];
 
   const sideItems = [
-    "Script Intelligence",
-    "Scene Analysis",
-    "Shotlist AI",
-    "Continuity Checker",
-    "Production Workflow",
-    "Education Mode",
-    "XR Narrative",
+    "Crea la tua storia",
+    "Parsing conservativo",
+    "Formattazione creativa",
+    "Schede personaggio",
+    "Schede location",
+    "Breakdown reparti",
+    "Piano di lavoro",
+    "Export PDF",
   ];
 
   const s = {
@@ -870,6 +875,10 @@ function OnboardingLanding({ onStart }) {
     sceneText: { color: "#d0d0d0", lineHeight: 1.65, margin: 0, fontSize: isNarrow ? "15px" : "16px" },
     badges: { marginTop: "15px", display: "flex", gap: "10px", flexWrap: "wrap" },
     badge: { display: "inline-block", background: "#262626", color: "#cccccc", padding: "8px 12px", borderRadius: "999px", fontSize: "14px" },
+    metricGrid: { display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "repeat(3, minmax(0, 1fr))", gap: "14px", marginTop: "20px" },
+    metric: { background: "#111", border: "1px solid #2a2a2a", borderRadius: "14px", padding: "16px" },
+    metricValue: { color: "#58a6ff", fontSize: "22px", fontWeight: 800, marginBottom: "4px" },
+    metricText: { color: "#aaa", fontSize: "13px", lineHeight: 1.45 },
     section: { maxWidth: "1200px", margin: "0 auto", padding: isNarrow ? "70px 18px" : "100px 40px" },
     sectionTitle: { margin: 0, fontSize: isNarrow ? "32px" : "42px", lineHeight: 1.1 },
     sectionLead: { margin: "18px 0 0", maxWidth: "820px", color: "#b0b0b0", lineHeight: 1.65, fontSize: isNarrow ? "17px" : "19px" },
@@ -886,10 +895,12 @@ function OnboardingLanding({ onStart }) {
         <img src="/deepframe_logo_concept.png" alt="DeepFrame - Beyond Screenwriting." style={s.logo} />
         <div style={s.subtitle}>
           Un ecosistema creativo per sviluppare, analizzare e trasformare storie in esperienze audiovisive.
+          Ora con generatore storie, LM Studio locale, breakdown produzione, calendario riprese ed export PDF operativi.
         </div>
 
         <div style={s.ctaRow}>
           <button type="button" style={s.cta} onClick={onStart}>Apri DeepFrame Script</button>
+          <a href="/crea-la-tua-storia/" style={s.ghostCta}>Crea la tua storia</a>
           <button
             type="button"
             style={s.ghostCta}
@@ -914,26 +925,38 @@ function OnboardingLanding({ onStart }) {
             </aside>
             <main style={s.main}>
               <article style={s.scene}>
-                <h2 style={s.sceneTitle}>INT. APARTMENT - NIGHT</h2>
+                <h2 style={s.sceneTitle}>Breakdown Reparti</h2>
                 <p style={s.sceneText}>
-                  Marco enters the apartment slowly. The room is illuminated only by the television light.
-                  A distant sound echoes from the kitchen.
+                  Dal testo alla produzione: cast numerato, location, props, costumi, comparse, effetti,
+                  audio e piano di lavoro con giornate modificabili.
                 </p>
                 <div style={s.badges}>
-                  {["50mm Lens Suggested", "Low Key Lighting", "Emotional Tension: High", "Production Complexity: Medium"].map((badge) => (
+                  {["Cast ID", "Location grouping", "INT/EST", "Production complexity"].map((badge) => (
                     <span key={badge} style={s.badge}>{badge}</span>
+                  ))}
+                </div>
+                <div style={s.metricGrid}>
+                  {[
+                    ["01", "Giornate riordinabili e modificabili"],
+                    ["8/8", "Ottavi pagina stimati per scena"],
+                    ["PDF", "Export report per reparti"],
+                  ].map(([value, text]) => (
+                    <div key={text} style={s.metric}>
+                      <div style={s.metricValue}>{value}</div>
+                      <div style={s.metricText}>{text}</div>
+                    </div>
                   ))}
                 </div>
               </article>
 
               <article style={s.scene}>
-                <h2 style={s.sceneTitle}>Creative Analysis</h2>
+                <h2 style={s.sceneTitle}>Piano di lavoro</h2>
                 <p style={s.sceneText}>
-                  The scene builds psychological tension through silence and negative space.
-                  Suggested camera movement: slow handheld push-in.
+                  Imposta date di ripresa, orari di inizio e fine, accorpa scene per location,
+                  interno/esterno, cast o complessita produttiva.
                 </p>
                 <div style={s.badges}>
-                  {["Suggested Mood: Suspense", "Shotlist Generated", "Continuity Verified"].map((badge) => (
+                  {["Calendario riprese", "Accorpa per location", "Export PDF", "LM Studio ready"].map((badge) => (
                     <span key={badge} style={s.badge}>{badge}</span>
                   ))}
                 </div>
@@ -947,7 +970,8 @@ function OnboardingLanding({ onStart }) {
         <h2 style={s.sectionTitle}>Creative Workflow Ecosystem</h2>
         <p style={s.sectionLead}>
           DeepFrame parte dalla sceneggiatura e prepara un percorso modulare per regia,
-          produzione, formazione e nuove esperienze audiovisive.
+          produzione, formazione e nuove esperienze audiovisive. Le funzioni aggiunte portano il modulo Script
+          da semplice formatter a strumento operativo per sviluppo narrativo e preparazione produttiva.
         </p>
         <div style={s.grid}>
           {featureRows.map(([title, text]) => (
