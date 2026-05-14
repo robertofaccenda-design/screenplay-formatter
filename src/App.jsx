@@ -1927,6 +1927,106 @@ const normalizeBreakdownExtras = (reparti, perScena) => {
   };
 };
 
+const complexityRank = { bassa: 1, media: 2, alta: 3, molto_alta: 4 };
+const complexityHours = { bassa: 2, media: 3, alta: 4, molto_alta: 5 };
+
+const normalizeComplexity = (value) => {
+  const key = String(value || "media").toLowerCase().replace(/\s+/g, "_");
+  return complexityRank[key] ? key : "media";
+};
+
+const estimateSceneHours = (scene) => {
+  if (!scene) return 0;
+  const complexity = normalizeComplexity(scene.complessità);
+  let hours = complexityHours[complexity] || 3;
+  if (asArray(scene.cast).length >= 5) hours += 0.5;
+  if (Number(scene.comparse_stimate) > 0) hours += 0.5;
+  if (asArray(scene.props_principali).length >= 4) hours += 0.5;
+  if (asArray(scene.elementi_speciali).length > 0) hours += 1;
+  return Math.round(hours * 2) / 2;
+};
+
+const getSceneLocation = (scene) => (
+  String(scene?.location_descrizione || scene?.titolo || "Location da definire").trim()
+);
+
+const getSceneEnvironment = (scene) => (
+  String(scene?.interno_esterno || "non_specificato").trim().toUpperCase()
+);
+
+const getSceneCastKey = (scene) => {
+  const cast = asArray(scene?.cast).map((name) => String(name).trim()).filter(Boolean).sort();
+  return cast.length ? cast.join(", ") : "Scene senza cast indicato";
+};
+
+const sceneNumbersFromDay = (day) => (
+  uniq(sceneList(day?.scene_consigliate || day?.scene).map((value) => Number(value)).filter(Boolean))
+);
+
+const strongestComplexity = (scenes) => scenes.reduce((current, scene) => {
+  const next = normalizeComplexity(scene?.complessità);
+  return complexityRank[next] > complexityRank[current] ? next : current;
+}, "bassa");
+
+const describeWorkPlanGroup = (strategy, label, scenes, hours) => {
+  const complexity = strongestComplexity(scenes).replace(/_/g, " ");
+  const count = scenes.length === 1 ? "1 scena" : `${scenes.length} scene`;
+  if (strategy === "location") return `${count} nella stessa location: ${label}. Complessità massima: ${complexity}.`;
+  if (strategy === "int_est") return `${count} accorpate per ${label}. Complessità massima: ${complexity}.`;
+  if (strategy === "cast") return `${count} con lo stesso gruppo attori. Complessità massima: ${complexity}.`;
+  if (strategy === "complexity") return `${count} ordinate per complessità produttiva. Stima giornata: ${hours}h.`;
+  return `${count} accorpate manualmente. Complessità massima: ${complexity}.`;
+};
+
+const buildWorkPlanFromScenes = (perScena, strategy) => {
+  const scenes = asArray(perScena).filter((scene) => scene?.numero);
+  if (!scenes.length) return [];
+
+  const orderedScenes = strategy === "complexity"
+    ? [...scenes].sort((a, b) => complexityRank[normalizeComplexity(b.complessità)] - complexityRank[normalizeComplexity(a.complessità)])
+    : scenes;
+
+  const groups = new Map();
+  orderedScenes.forEach((scene) => {
+    const key = strategy === "location" ? getSceneLocation(scene)
+      : strategy === "int_est" ? getSceneEnvironment(scene)
+        : strategy === "cast" ? getSceneCastKey(scene)
+          : "Complessità produttiva";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(scene);
+  });
+
+  const days = [];
+  groups.forEach((groupScenes, label) => {
+    let current = [];
+    let currentHours = 0;
+
+    const closeDay = () => {
+      if (!current.length) return;
+      const hours = Math.round(currentHours * 2) / 2;
+      days.push({
+        giorno: days.length + 1,
+        scene_consigliate: current.map((scene) => scene.numero),
+        motivazione: describeWorkPlanGroup(strategy, label, current, hours),
+        ore_stimate: hours,
+        criterio: strategy,
+      });
+      current = [];
+      currentHours = 0;
+    };
+
+    groupScenes.forEach((scene) => {
+      const sceneHours = estimateSceneHours(scene);
+      if (current.length && currentHours + sceneHours > 8) closeDay();
+      current.push(scene);
+      currentHours += sceneHours;
+    });
+    closeDay();
+  });
+
+  return days;
+};
+
 function EmptyBreakdownSection({ label }) {
   return (
     <div style={{ padding: "18px", border: "1px dashed rgba(255,255,255,.12)", borderRadius: "8px", color: "#777", fontSize: "12px", fontFamily: "sans-serif" }}>
@@ -1938,11 +2038,14 @@ function EmptyBreakdownSection({ label }) {
 function BreakdownPanel({ data }) {
   const [activeTab, setActiveTab] = useState("riepilogo");
   const [workPlan, setWorkPlan] = useState([]);
+  const [manualScene, setManualScene] = useState("");
+  const [manualTargetDay, setManualTargetDay] = useState("");
   useEffect(() => {
     setWorkPlan(asArray(data?.piano_lavoro_suggerito || data?.piano_riprese_suggerito));
   }, [data]);
   if (!data) return null;
   const { riepilogo, per_scena, reparti } = data;
+  const sceneByNumber = new Map(asArray(per_scena).map((scene) => [Number(scene.numero), scene]));
   const castItems = normalizeBreakdownCast(reparti, per_scena);
   const locationItems = normalizeBreakdownLocations(reparti, per_scena);
   const propItems = normalizeBreakdownProps(reparti, per_scena);
@@ -1958,6 +2061,80 @@ function BreakdownPanel({ data }) {
       [next[index], next[target]] = [next[target], next[index]];
       return next.map((day, dayIndex) => ({ ...day, giorno: dayIndex + 1 }));
     });
+  };
+
+  const updateWorkDayMetrics = (day, override = {}) => {
+    const numbers = sceneNumbersFromDay({ ...day, ...override });
+    const scenes = numbers.map((number) => sceneByNumber.get(number)).filter(Boolean);
+    const hours = Math.round(scenes.reduce((sum, scene) => sum + estimateSceneHours(scene), 0) * 2) / 2;
+    return {
+      ...day,
+      ...override,
+      scene_consigliate: numbers,
+      ore_stimate: hours,
+      complessità_massima: scenes.length ? strongestComplexity(scenes) : "media",
+    };
+  };
+
+  const getWorkDayComplexity = (day) => (
+    day.complessità_massima || strongestComplexity(sceneNumbersFromDay(day).map((number) => sceneByNumber.get(number)).filter(Boolean))
+  );
+
+  const applyWorkPlanStrategy = (strategy) => {
+    setWorkPlan(buildWorkPlanFromScenes(per_scena, strategy));
+    setManualTargetDay("1");
+    setActiveTab("piano");
+  };
+
+  const addWorkDay = () => {
+    setWorkPlan((current) => ([
+      ...current,
+      {
+        giorno: current.length + 1,
+        scene_consigliate: [],
+        motivazione: "Giornata aggiunta manualmente. Sposta qui le scene che vuoi accorpare.",
+        ore_stimate: 0,
+        criterio: "manuale",
+        manuale: true,
+      },
+    ]));
+    setManualTargetDay(String(workPlan.length + 1));
+  };
+
+  const removeWorkDay = (index) => {
+    setWorkPlan((current) => current
+      .filter((_, dayIndex) => dayIndex !== index)
+      .map((day, dayIndex) => ({ ...day, giorno: dayIndex + 1 })));
+  };
+
+  const moveSceneToDay = (sceneNumber, targetDayNumber) => {
+    const number = Number(sceneNumber);
+    const target = Number(targetDayNumber);
+    if (!number || !target) return;
+
+    setWorkPlan((current) => {
+      const basePlan = current.length ? current : buildWorkPlanFromScenes(per_scena, "complexity");
+      return basePlan.map((day) => {
+        const numbers = sceneNumbersFromDay(day).filter((item) => item !== number);
+        const nextNumbers = Number(day.giorno) === target ? uniq([...numbers, number]) : numbers;
+        const motivazione = Number(day.giorno) === target
+          ? "Giornata modificata manualmente. La stima tiene conto della complessità delle scene inserite."
+          : day.motivazione;
+        return updateWorkDayMetrics(day, { scene_consigliate: nextNumbers, motivazione, criterio: Number(day.giorno) === target ? "manuale" : day.criterio });
+      });
+    });
+  };
+
+  const removeSceneFromDay = (dayIndex, sceneNumber) => {
+    const number = Number(sceneNumber);
+    setWorkPlan((current) => current.map((day, index) => {
+      if (index !== dayIndex) return day;
+      return updateWorkDayMetrics(day, {
+        scene_consigliate: sceneNumbersFromDay(day).filter((item) => item !== number),
+        motivazione: "Giornata modificata manualmente. La stima tiene conto della complessità delle scene rimaste.",
+        criterio: "manuale",
+      });
+    }));
   };
 
   const tabBtn = (id, label, count) => (
@@ -1984,7 +2161,7 @@ function BreakdownPanel({ data }) {
         {tabBtn("props",     "Props",     propItems.length)}
         {tabBtn("costumi",   "Costumi",   costumeItems.length)}
         {extraCount > 0 && tabBtn("extra", "Extra", extraCount)}
-        {workPlan.length > 0 && tabBtn("piano", "Piano di lavoro", workPlan.length)}
+        {asArray(per_scena).length > 0 && tabBtn("piano", "Piano di lavoro", workPlan.length)}
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
@@ -2206,9 +2383,46 @@ function BreakdownPanel({ data }) {
         {/* PIANO DI LAVORO */}
         {activeTab === "piano" && workPlan && (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            <div style={{ fontSize: "12px", color: "#888", fontFamily: "sans-serif", marginBottom: "4px" }}>
-              Piano di lavoro modificabile: usa le frecce per cambiare l'ordine delle giornate.
+            <div style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: "8px", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div style={{ fontSize: "12px", color: "#aaa", fontFamily: "sans-serif", lineHeight: "1.5" }}>
+                Accorpa automaticamente le scene per criterio produttivo, poi rifinisci a mano le giornate. Ogni stima considera la complessità della scena, cast, comparse, props ed elementi speciali.
+              </div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ fontSize: "11px", color: "#777", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px" }}>Accorpa per</span>
+                {[
+                  ["location", "Location"],
+                  ["int_est", "INT/EST"],
+                  ["cast", "Attori"],
+                  ["complexity", "Complessità"],
+                ].map(([strategy, label]) => (
+                  <button key={strategy} onClick={() => applyWorkPlanStrategy(strategy)} style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(200,169,110,.28)", background: "rgba(200,169,110,.08)", color: "#c8a96e", cursor: "pointer", fontSize: "11px", fontFamily: "sans-serif", fontWeight: "bold" }}>
+                    {label}
+                  </button>
+                ))}
+                <button onClick={addWorkDay} style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(79,195,247,.28)", background: "rgba(79,195,247,.08)", color: "#4FC3F7", cursor: "pointer", fontSize: "11px", fontFamily: "sans-serif", fontWeight: "bold" }}>
+                  + Giornata
+                </button>
+              </div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ fontSize: "11px", color: "#777", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px" }}>Manuale</span>
+                <select value={manualScene || String(asArray(per_scena)[0]?.numero || "")} onChange={(event) => setManualScene(event.target.value)} style={{ background: "#11131a", color: "#ddd", border: "1px solid rgba(255,255,255,.12)", borderRadius: "6px", padding: "6px 8px", fontSize: "12px", fontFamily: "sans-serif" }}>
+                  {asArray(per_scena).map((scene) => (
+                    <option key={scene.numero} value={scene.numero}>Sc.{scene.numero} - {scene.titolo || getSceneLocation(scene)}</option>
+                  ))}
+                </select>
+                <select value={manualTargetDay || String(workPlan[0]?.giorno || 1)} onChange={(event) => setManualTargetDay(event.target.value)} style={{ background: "#11131a", color: "#ddd", border: "1px solid rgba(255,255,255,.12)", borderRadius: "6px", padding: "6px 8px", fontSize: "12px", fontFamily: "sans-serif" }}>
+                  {(workPlan.length ? workPlan : [{ giorno: 1 }]).map((day) => (
+                    <option key={day.giorno} value={day.giorno}>Giorno {day.giorno}</option>
+                  ))}
+                </select>
+                <button onClick={() => moveSceneToDay(manualScene || asArray(per_scena)[0]?.numero, manualTargetDay || workPlan[0]?.giorno || 1)} style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.05)", color: "#ddd", cursor: "pointer", fontSize: "11px", fontFamily: "sans-serif", fontWeight: "bold" }}>
+                  Sposta nella giornata
+                </button>
+              </div>
             </div>
+            {workPlan.length === 0 && (
+              <EmptyBreakdownSection label="piano di lavoro. Usa un criterio di accorpamento o aggiungi una giornata manuale" />
+            )}
             {workPlan.map((g, index) => (
               <div key={`${g.giorno}-${index}`} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: "8px", padding: "14px 16px" }}>
                 <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "10px", flexWrap: "wrap" }}>
@@ -2220,13 +2434,33 @@ function BreakdownPanel({ data }) {
                     <button onClick={() => moveWorkDay(index, 1)} disabled={index === workPlan.length - 1} style={{ padding: "4px 8px", borderRadius: "5px", border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.05)", color: index === workPlan.length - 1 ? "#444" : "#ddd", cursor: index === workPlan.length - 1 ? "not-allowed" : "pointer" }}>↓</button>
                   </div>
                   <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                    {g.scene_consigliate?.map(sc => (
-                      <Badge key={sc} label={`Sc.${sc}`} color="#c8a96e" small />
+                    {sceneNumbersFromDay(g).map(sc => (
+                      <span key={sc} style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "1px 6px", borderRadius: "20px", fontSize: "10px", fontFamily: "sans-serif", background: "rgba(200,169,110,.13)", color: "#c8a96e", border: "1px solid rgba(200,169,110,.28)", whiteSpace: "nowrap" }}>
+                        Sc.{sc}
+                        <button onClick={() => removeSceneFromDay(index, sc)} title="Rimuovi dalla giornata" style={{ border: "none", background: "transparent", color: "#c8a96e", cursor: "pointer", padding: 0, fontSize: "11px", lineHeight: 1 }}>×</button>
+                      </span>
                     ))}
                   </div>
+                  <Badge label={getWorkDayComplexity(g).replace(/_/g, " ")} color={complessitàProdColors[getWorkDayComplexity(g)] || "#888"} small />
                   <span style={{ marginLeft: "auto", fontSize: "11px", color: "#888", fontFamily: "sans-serif" }}>~{g.ore_stimate}h</span>
+                  <button onClick={() => removeWorkDay(index)} style={{ padding: "4px 8px", borderRadius: "5px", border: "1px solid rgba(255,107,107,.18)", background: "rgba(255,107,107,.06)", color: "#FF6B6B", cursor: "pointer", fontSize: "11px", fontFamily: "sans-serif" }}>Elimina</button>
                 </div>
                 <div style={{ fontSize: "12px", color: "#aaa", fontFamily: "sans-serif", lineHeight: "1.5", fontStyle: "italic" }}>{g.motivazione}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "10px" }}>
+                  {sceneNumbersFromDay(g).map((number) => {
+                    const scene = sceneByNumber.get(number);
+                    if (!scene) return null;
+                    return (
+                      <div key={number} style={{ display: "grid", gridTemplateColumns: "54px minmax(160px, 1fr) 80px minmax(120px, 1fr) 70px", gap: "8px", alignItems: "center", padding: "8px 10px", background: "rgba(255,255,255,.025)", border: "1px solid rgba(255,255,255,.05)", borderRadius: "6px" }}>
+                        <span style={{ fontSize: "11px", color: "#c8a96e", fontFamily: "monospace" }}>Sc.{number}</span>
+                        <span style={{ fontSize: "12px", color: "#ddd", fontFamily: "sans-serif", overflowWrap: "anywhere" }}>{getSceneLocation(scene)}</span>
+                        <Badge label={getSceneEnvironment(scene)} color="#4FC3F7" small />
+                        <span style={{ fontSize: "11px", color: "#888", fontFamily: "sans-serif", overflowWrap: "anywhere" }}>{asArray(scene.cast).join(", ") || "cast da definire"}</span>
+                        <Badge label={normalizeComplexity(scene.complessità).replace(/_/g, " ")} color={complessitàProdColors[normalizeComplexity(scene.complessità)] || "#888"} small />
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ))}
           </div>
