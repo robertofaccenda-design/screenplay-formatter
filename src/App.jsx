@@ -2140,6 +2140,25 @@ const buildWorkPlanFromScenes = (perScena, strategy) => {
   return days;
 };
 
+const dateInputToDate = (value) => {
+  if (!value) return null;
+  const [year, month, day] = String(value).split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
+
+const formatShootDate = (date) => (
+  date instanceof Date && !Number.isNaN(date.getTime())
+    ? date.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" })
+    : ""
+);
+
+const addCalendarDays = (date, days) => {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+};
+
 function EmptyBreakdownSection({ label }) {
   return (
     <div style={{ padding: "18px", border: "1px dashed rgba(255,255,255,.12)", borderRadius: "8px", color: "#777", fontSize: "12px", fontFamily: "sans-serif" }}>
@@ -2153,6 +2172,10 @@ function BreakdownPanel({ data }) {
   const [workPlan, setWorkPlan] = useState([]);
   const [manualScene, setManualScene] = useState("");
   const [manualTargetDay, setManualTargetDay] = useState("");
+  const [shootStartDate, setShootStartDate] = useState("");
+  const [shootEndDate, setShootEndDate] = useState("");
+  const [shootStartTime, setShootStartTime] = useState("10:00");
+  const [shootEndTime, setShootEndTime] = useState("18:00");
   useEffect(() => {
     setWorkPlan(asArray(data?.piano_lavoro_suggerito || data?.piano_riprese_suggerito));
   }, [data]);
@@ -2209,6 +2232,41 @@ function BreakdownPanel({ data }) {
   const getWorkDayLocations = (day) => uniq(getWorkDayScenes(day).map((scene) => getSceneLocation(scene))).join(", ") || "Location da definire";
 
   const getWorkDayTime = (day) => day.orario || [day.ora_inizio, day.ora_fine].filter(Boolean).join(" - ") || "10:00 - 18:00";
+
+  const shootStart = dateInputToDate(shootStartDate);
+  const shootEnd = dateInputToDate(shootEndDate);
+  const shootingWindowDays = shootStart && shootEnd
+    ? Math.floor((shootEnd.getTime() - shootStart.getTime()) / 86400000) + 1
+    : 0;
+  const scheduleExceedsWindow = shootingWindowDays > 0 && workPlan.length > shootingWindowDays;
+
+  const applyShootCalendar = () => {
+    const firstDate = dateInputToDate(shootStartDate);
+    if (!firstDate) return;
+    setWorkPlan((current) => current.map((day, index) => {
+      const shootDate = addCalendarDays(firstDate, index);
+      return {
+        ...day,
+        data: formatShootDate(shootDate),
+        data_iso: shootDate.toISOString().slice(0, 10),
+        ora_inizio: shootStartTime,
+        ora_fine: shootEndTime,
+        orario: `${shootStartTime} - ${shootEndTime}`,
+      };
+    }));
+  };
+
+  const updateWorkDaySchedule = (index, field, value) => {
+    setWorkPlan((current) => current.map((day, dayIndex) => {
+      if (dayIndex !== index) return day;
+      const next = { ...day, [field]: value };
+      if (field === "data_iso") next.data = formatShootDate(dateInputToDate(value)) || value;
+      const start = field === "ora_inizio" ? value : next.ora_inizio;
+      const end = field === "ora_fine" ? value : next.ora_fine;
+      if (start || end) next.orario = [start, end].filter(Boolean).join(" - ");
+      return next;
+    }));
+  };
 
   const applyWorkPlanStrategy = (strategy) => {
     setWorkPlan(buildWorkPlanFromScenes(per_scena, strategy));
@@ -2517,6 +2575,33 @@ function BreakdownPanel({ data }) {
               <div style={{ fontSize: "12px", color: "#aaa", fontFamily: "sans-serif", lineHeight: "1.5" }}>
                 Accorpa automaticamente le scene per criterio produttivo, poi rifinisci a mano le giornate. Ogni stima considera la complessità della scena, cast, comparse, props ed elementi speciali.
               </div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", padding: "10px", background: "rgba(79,195,247,.045)", border: "1px solid rgba(79,195,247,.12)", borderRadius: "6px" }}>
+                <span style={{ fontSize: "11px", color: "#4FC3F7", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px", fontWeight: "bold" }}>Calendario riprese</span>
+                <label style={{ display: "flex", gap: "5px", alignItems: "center", fontSize: "11px", color: "#777", fontFamily: "sans-serif" }}>
+                  Inizio
+                  <input type="date" value={shootStartDate} onChange={(event) => setShootStartDate(event.target.value)} style={{ background: "#11131a", color: "#ddd", border: "1px solid rgba(255,255,255,.12)", borderRadius: "6px", padding: "5px 7px", fontSize: "12px", fontFamily: "sans-serif" }} />
+                </label>
+                <label style={{ display: "flex", gap: "5px", alignItems: "center", fontSize: "11px", color: "#777", fontFamily: "sans-serif" }}>
+                  Fine
+                  <input type="date" value={shootEndDate} onChange={(event) => setShootEndDate(event.target.value)} style={{ background: "#11131a", color: "#ddd", border: "1px solid rgba(255,255,255,.12)", borderRadius: "6px", padding: "5px 7px", fontSize: "12px", fontFamily: "sans-serif" }} />
+                </label>
+                <label style={{ display: "flex", gap: "5px", alignItems: "center", fontSize: "11px", color: "#777", fontFamily: "sans-serif" }}>
+                  Da
+                  <input type="time" value={shootStartTime} onChange={(event) => setShootStartTime(event.target.value)} style={{ background: "#11131a", color: "#ddd", border: "1px solid rgba(255,255,255,.12)", borderRadius: "6px", padding: "5px 7px", fontSize: "12px", fontFamily: "sans-serif" }} />
+                </label>
+                <label style={{ display: "flex", gap: "5px", alignItems: "center", fontSize: "11px", color: "#777", fontFamily: "sans-serif" }}>
+                  A
+                  <input type="time" value={shootEndTime} onChange={(event) => setShootEndTime(event.target.value)} style={{ background: "#11131a", color: "#ddd", border: "1px solid rgba(255,255,255,.12)", borderRadius: "6px", padding: "5px 7px", fontSize: "12px", fontFamily: "sans-serif" }} />
+                </label>
+                <button onClick={applyShootCalendar} disabled={!shootStartDate || !workPlan.length} style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(79,195,247,.28)", background: "rgba(79,195,247,.08)", color: !shootStartDate || !workPlan.length ? "#456" : "#4FC3F7", cursor: !shootStartDate || !workPlan.length ? "not-allowed" : "pointer", fontSize: "11px", fontFamily: "sans-serif", fontWeight: "bold" }}>
+                  Applica date
+                </button>
+                {shootStartDate && shootEndDate && (
+                  <span style={{ fontSize: "11px", color: scheduleExceedsWindow ? "#FF8A65" : "#888", fontFamily: "sans-serif" }}>
+                    {scheduleExceedsWindow ? "Le giornate superano la finestra impostata." : `${shootingWindowDays} giorni disponibili.`}
+                  </span>
+                )}
+              </div>
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
                 <span style={{ fontSize: "11px", color: "#777", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px" }}>Accorpa per</span>
                 {[
@@ -2594,6 +2679,12 @@ function BreakdownPanel({ data }) {
                   </div>
                 </div>
                 <div style={{ padding: "12px 16px 14px" }}>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", marginBottom: "10px", padding: "8px 10px", background: "rgba(255,255,255,.025)", border: "1px solid rgba(255,255,255,.055)", borderRadius: "6px" }}>
+                    <span style={{ fontSize: "10px", color: "#777", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px" }}>Orario giornata</span>
+                    <input type="date" value={g.data_iso || ""} onChange={(event) => updateWorkDaySchedule(index, "data_iso", event.target.value)} style={{ background: "#11131a", color: "#ddd", border: "1px solid rgba(255,255,255,.12)", borderRadius: "6px", padding: "5px 7px", fontSize: "12px", fontFamily: "sans-serif" }} />
+                    <input type="time" value={g.ora_inizio || shootStartTime} onChange={(event) => updateWorkDaySchedule(index, "ora_inizio", event.target.value)} style={{ background: "#11131a", color: "#ddd", border: "1px solid rgba(255,255,255,.12)", borderRadius: "6px", padding: "5px 7px", fontSize: "12px", fontFamily: "sans-serif" }} />
+                    <input type="time" value={g.ora_fine || shootEndTime} onChange={(event) => updateWorkDaySchedule(index, "ora_fine", event.target.value)} style={{ background: "#11131a", color: "#ddd", border: "1px solid rgba(255,255,255,.12)", borderRadius: "6px", padding: "5px 7px", fontSize: "12px", fontFamily: "sans-serif" }} />
+                  </div>
                   <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "10px", flexWrap: "wrap" }}>
                   <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                     {sceneNumbersFromDay(g).map(sc => (
