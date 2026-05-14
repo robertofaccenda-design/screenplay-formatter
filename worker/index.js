@@ -396,6 +396,12 @@ const missingApiKeyResponse = () => jsonResponse({
   error: "Per usare le funzioni AI serve una chiave Anthropic. Inserisci la tua chiave personale nel campo dedicato e riprova. Se stai gestendo tu l'app, puoi anche configurare una chiave predefinita sul Worker.",
 }, 502);
 
+const getFallbackStoryChoices = (act) => act >= 5 ? [] : [
+  "Accettare la sfida e andare avanti",
+  "Cercare un aiuto prima di decidere",
+  "Seguire una strada inattesa",
+];
+
 const cleanStoryText = (text) => text
   .replace(/^\s*#{1,6}\s*/, "")
   .replace(/^\s*\*\*([^\n]+?)\*\*(?=\s*(?:\n|$))/i, "$1")
@@ -433,7 +439,10 @@ const parseStoryResponse = (responseText, act) => {
   } else if (arrayStartIndex !== -1 && arrayEndIndex !== -1 && arrayEndIndex > arrayStartIndex) {
     choicesJson = responseText.slice(arrayStartIndex, arrayEndIndex + 1);
   } else {
-    throw new Error("Formato della risposta non valido: non è stata trovata la matrice delle scelte.");
+    return {
+      storyText: cleanStoryText(responseText),
+      choices: getFallbackStoryChoices(act),
+    };
   }
 
   const storyText = cleanStoryText(responseText.slice(0, jsonStartIndex));
@@ -442,7 +451,7 @@ const parseStoryResponse = (responseText, act) => {
   const choicesData = Array.isArray(parsedChoices)
     ? parsedChoices
     : parsedChoices?.scelte_critiche || parsedChoices?.choices || parsedChoices?.scelte;
-  if (!Array.isArray(choicesData) || (choicesData.length === 0 && act < 5)) {
+  if (!Array.isArray(choicesData)) {
     throw new Error("Le scelte non sono valide o sono vuote prima dell'atto finale.");
   }
 
@@ -456,6 +465,10 @@ const parseStoryResponse = (responseText, act) => {
     }
     return null;
   }).filter(Boolean);
+
+  if (choices.length === 0 && act < 5) {
+    return { storyText, choices: getFallbackStoryChoices(act) };
+  }
 
   return { storyText, choices };
 };

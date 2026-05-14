@@ -60,6 +60,16 @@ interface StoryGenerationResult {
   choices: string[];
 }
 
+const getFallbackChoices = (act: number): string[] => (
+  act >= 5
+    ? []
+    : [
+      'Accettare la sfida e andare avanti',
+      'Cercare un aiuto prima di decidere',
+      'Seguire una strada inattesa',
+    ]
+);
+
 const cleanStoryText = (text: string): string => text
   .replace(/^\s*#{1,6}\s*/, '')
   .replace(/^\s*\*\*([^\n]+?)\*\*(?=\s*(?:\n|$))/i, '$1')
@@ -110,7 +120,10 @@ const parseStoryResponse = (responseText: string, act: number): StoryGenerationR
     jsonStartIndex = arrayStartIndex;
     choicesJson = responseText.substring(arrayStartIndex, arrayEndIndex + 1);
   } else {
-    throw new Error("Formato della risposta non valido: non è stata trovata alcuna matrice di scelte.");
+    return {
+      storyText: cleanStoryText(responseText),
+      choices: getFallbackChoices(act),
+    };
   }
 
   const storyText = cleanStoryText(responseText.substring(0, jsonStartIndex));
@@ -120,7 +133,7 @@ const parseStoryResponse = (responseText: string, act: number): StoryGenerationR
     const choicesData = Array.isArray(parsedChoices)
       ? parsedChoices
       : parsedChoices?.scelte_critiche || parsedChoices?.choices || parsedChoices?.scelte;
-    if (!Array.isArray(choicesData) || (choicesData.length === 0 && act < 5)) {
+    if (!Array.isArray(choicesData)) {
       throw new Error("Le scelte non sono una matrice valida o la matrice è vuota prima dell'atto finale.");
     }
     
@@ -145,6 +158,10 @@ const parseStoryResponse = (responseText: string, act: number): StoryGenerationR
       // Return null if no valid string is found, to be filtered out later.
       return null;
     }).filter((c): c is string => c !== null);
+
+    if (choices.length === 0 && act < 5) {
+      return { storyText, choices: getFallbackChoices(act) };
+    }
 
     if (choices.length !== choicesData.length) {
         throw new Error("Formato delle scelte non valido all'interno della matrice.");
