@@ -51,6 +51,22 @@ Regole:
 - Ogni elemento deve avere: { "type": "<tipo>", "content": "<testo>" }.
 
 Restituisci SOLO l'array JSON, senza markdown, senza spiegazioni.`,
+  organic: `Sei un esperto sceneggiatore cinematografico, script doctor e story editor. Trasforma il testo in una sceneggiatura piu organica, coerente e cinematografica, applicando i parametri creativi richiesti dall'utente senza tradire il nucleo della storia.
+
+Tipi ammessi: "scene_heading", "action", "character", "parenthetical", "dialogue", "transition", "title", "blank".
+
+Regole:
+- Rendi la sceneggiatura piu organica: migliora raccordi, motivazioni, progressione causa-effetto, ritmo, conflitto e continuita emotiva.
+- Applica solo i parametri creativi richiesti: sorpresa, nuovo personaggio, virata di genere, tono, o note libere.
+- Se aggiungi un personaggio, dagli una funzione drammaturgica chiara e non decorativa.
+- Se aggiungi un elemento sorpresa, preparalo con piccoli indizi e integralo nella scena senza effetto casuale.
+- Se cambi genere o tono, riscrivi atmosfera, dettagli, conflitto e dialoghi in modo coerente.
+- Mantieni la lingua originale, il nucleo della storia e i personaggi gia presenti.
+- Aggiungi intestazioni di scena INT./EST. quando servono.
+- Scrivi in presente indicativo e stile visivo, concreto, cinematografico.
+- Ogni elemento deve avere: { "type": "<tipo>", "content": "<testo>" }.
+
+Restituisci SOLO l'array JSON, senza markdown, senza spiegazioni.`,
   conservative: `Sei un parser conservativo di sceneggiature. Trasforma il testo in un array JSON classificando ogni riga o blocco senza aggiungere contenuto e senza migliorare lo stile.
 
 Tipi ammessi: "scene_heading", "action", "character", "parenthetical", "dialogue", "transition", "title", "blank".
@@ -63,6 +79,48 @@ Regole:
 - Ogni elemento deve avere: { "type": "<tipo>", "content": "<testo>" }.
 
 Restituisci SOLO l'array JSON, senza markdown, senza spiegazioni.`,
+};
+
+const ORGANIC_GENRE_LABELS = {
+  neutral: "piu organica e fluida",
+  crime: "piu crime",
+  thriller: "piu thriller",
+  noir: "piu noir",
+  comedy: "piu commedia",
+  drama: "piu drammatica",
+};
+
+const DEFAULT_ORGANIC_OPTIONS = {
+  genre: "neutral",
+  surprise: true,
+  newCharacter: false,
+  note: "",
+};
+
+const buildOrganicInstructions = (options = DEFAULT_ORGANIC_OPTIONS) => {
+  const normalized = { ...DEFAULT_ORGANIC_OPTIONS, ...options };
+  const instructions = [
+    `Direzione: rendi lo script ${ORGANIC_GENRE_LABELS[normalized.genre] || ORGANIC_GENRE_LABELS.neutral}.`,
+    "Rendi la sceneggiatura piu organica: raccorda meglio le scene, rafforza motivazioni, conflitto, ritmo, sottotesto e continuita emotiva.",
+  ];
+
+  if (normalized.surprise) {
+    instructions.push("Aggiungi un elemento sorpresa integrato nella storia, preparato con piccoli indizi e non come svolta casuale.");
+  }
+
+  if (normalized.newCharacter) {
+    instructions.push("Aggiungi un nuovo personaggio con funzione drammaturgica precisa, capace di modificare relazioni, conflitto o posta in gioco.");
+  }
+
+  if (normalized.genre === "crime") {
+    instructions.push("Rendi lo script piu crime: inserisci indizi, ambiguita morale, pressione investigativa, posta in gioco concreta e dettagli di ambiente coerenti.");
+  }
+
+  if (normalized.note.trim()) {
+    instructions.push(`Nota libera dell'autore: ${normalized.note.trim()}`);
+  }
+
+  return instructions.join("\n- ");
 };
 
 const LOCAL_ANALYSIS_PROMPTS = {
@@ -998,6 +1056,39 @@ function OnboardingLanding({ onStart }) {
   );
 }
 
+const APP_GUIDED_STEP_COPY = [
+  {
+    title: "Benvenuto in DeepFrame Script",
+    text: "Questo è il primo modulo dell'ecosistema: qui trasformi una bozza in sceneggiatura, analisi e schede operative.",
+    color: "#8B5CF6",
+    target: "onboarding",
+  },
+  {
+    title: "Carica il tuo file",
+    text: "Trascina qui TXT, DOCX o DOC. Il sistema accetta solo testi che sembrano sceneggiature.",
+    color: "#8B5CF6",
+    target: "dropzone",
+  },
+  {
+    title: "Configura la tua API",
+    text: "Inserisci la tua chiave Anthropic personale. Se scegli di ricordarla, resta solo nel tuo browser.",
+    color: "#22C55E",
+    target: "apiKey",
+  },
+  {
+    title: "Incolla il testo",
+    text: "Puoi anche lavorare senza file: incolla direttamente qui una scena o una bozza.",
+    color: "#FACC15",
+    target: "rawText",
+  },
+  {
+    title: "Formatta e analizza",
+    text: "Una volta inserito il testo, avvia la formattazione. Dopo compariranno analisi, schede e breakdown.",
+    color: "#38BDF8",
+    target: "formatButton",
+  },
+];
+
 function AppGuidedOnboarding({ onClose, targets }) {
   const [activeStep, setActiveStep] = useState(0);
   const [isNarrow, setIsNarrow] = useState(() => window.innerWidth <= 900);
@@ -1011,39 +1102,6 @@ function AppGuidedOnboarding({ onClose, targets }) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const stepCopy = [
-    {
-      title: "Benvenuto in DeepFrame Script",
-      text: "Questo è il primo modulo dell'ecosistema: qui trasformi una bozza in sceneggiatura, analisi e schede operative.",
-      color: "#8B5CF6",
-      target: "onboarding",
-    },
-    {
-      title: "Carica il tuo file",
-      text: "Trascina qui TXT, DOCX o DOC. Il sistema accetta solo testi che sembrano sceneggiature.",
-      color: "#8B5CF6",
-      target: "dropzone",
-    },
-    {
-      title: "Configura la tua API",
-      text: "Inserisci la tua chiave Anthropic personale. Se scegli di ricordarla, resta solo nel tuo browser.",
-      color: "#22C55E",
-      target: "apiKey",
-    },
-    {
-      title: "Incolla il testo",
-      text: "Puoi anche lavorare senza file: incolla direttamente qui una scena o una bozza.",
-      color: "#FACC15",
-      target: "rawText",
-    },
-    {
-      title: "Formatta e analizza",
-      text: "Una volta inserito il testo, avvia la formattazione. Dopo compariranno analisi, schede e breakdown.",
-      color: "#38BDF8",
-      target: "formatButton",
-    },
-  ];
-
   useEffect(() => {
     const cardWidth = 286;
     const cardGap = 44;
@@ -1055,7 +1113,7 @@ function AppGuidedOnboarding({ onClose, targets }) {
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
 
-      const measured = stepCopy.map((step, index) => {
+      const measured = APP_GUIDED_STEP_COPY.map((step, index) => {
         const rect = getRect(step.target);
         if (!rect) return null;
 
@@ -1111,7 +1169,7 @@ function AppGuidedOnboarding({ onClose, targets }) {
     onClose();
   };
 
-  const steps = desktopSteps.length === stepCopy.length ? desktopSteps : stepCopy;
+  const steps = desktopSteps.length === APP_GUIDED_STEP_COPY.length ? desktopSteps : APP_GUIDED_STEP_COPY;
   const active = steps[activeStep];
 
   if (isNarrow) {
@@ -1137,7 +1195,7 @@ function AppGuidedOnboarding({ onClose, targets }) {
     );
   }
 
-  if (desktopSteps.length !== stepCopy.length) return null;
+  if (desktopSteps.length !== APP_GUIDED_STEP_COPY.length) return null;
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 50, pointerEvents: "none" }}>
@@ -1629,6 +1687,15 @@ const tipoLocColors   = { INT: "#4FC3F7", EST: "#A5D6A7", "INT/EST": "#FFD54F" }
 const allestLocColors = { minimo: "#A5D6A7", medio: "#FFD54F", importante: "#FF8A65", costruito_in_studio: "#FF6B6B" };
 const budgetColors    = { minimo: "#A5D6A7", contenuto: "#4FC3F7", medio: "#FFD54F", significativo: "#FF8A65" };
 
+function LocationDetailRow({ label, val }) {
+  return val && val !== "non_specificato" && val !== "non specificato" ? (
+    <div style={{ display: "flex", gap: "10px", padding: "7px 0", borderBottom: "1px solid rgba(255,255,255,.04)" }}>
+      <span style={{ fontSize: "11px", color: "#666", fontFamily: "sans-serif", minWidth: "170px", paddingTop: "2px" }}>{label}</span>
+      <span style={{ fontSize: "12px", color: "#ccc", fontFamily: "sans-serif", lineHeight: "1.5" }}>{String(val)}</span>
+    </div>
+  ) : null;
+}
+
 function SchedeLocation({ data }) {
   const [selected, setSelected] = useState(0);
   const [activeSection, setActiveSection] = useState("narrativa");
@@ -1643,13 +1710,6 @@ function SchedeLocation({ data }) {
       color: active ? "#4FC3F7" : "#666", transition: "all .2s",
     }}>{label}</button>
   );
-
-  const Row = ({ label, val }) => val && val !== "non_specificato" && val !== "non specificato" ? (
-    <div style={{ display: "flex", gap: "10px", padding: "7px 0", borderBottom: "1px solid rgba(255,255,255,.04)" }}>
-      <span style={{ fontSize: "11px", color: "#666", fontFamily: "sans-serif", minWidth: "170px", paddingTop: "2px" }}>{label}</span>
-      <span style={{ fontSize: "12px", color: "#ccc", fontFamily: "sans-serif", lineHeight: "1.5" }}>{String(val)}</span>
-    </div>
-  ) : null;
 
   return (
     <div style={{ display: "flex", gap: "0", height: "100%" }}>
@@ -1748,9 +1808,9 @@ function SchedeLocation({ data }) {
             {loc.piano_riprese && (
               <div style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.06)", borderRadius: "6px", padding: "12px 14px" }}>
                 <div style={{ fontSize: "10px", color: "#777", fontFamily: "sans-serif", marginBottom: "8px" }}>📅 Piano riprese</div>
-                <Row label="Giorni stimati" val={`${loc.piano_riprese.giorni_stimati} giorni · ${loc.piano_riprese.ore_stimate_totali}h totali`} />
-                <Row label="Scene nello stesso giorno" val={loc.piano_riprese.scene_consigliate_nello_stesso_giorno?.join(", ")} />
-                <Row label="Ottimizzazione" val={loc.piano_riprese.note_ottimizzazione} />
+                <LocationDetailRow label="Giorni stimati" val={`${loc.piano_riprese.giorni_stimati} giorni · ${loc.piano_riprese.ore_stimate_totali}h totali`} />
+                <LocationDetailRow label="Scene nello stesso giorno" val={loc.piano_riprese.scene_consigliate_nello_stesso_giorno?.join(", ")} />
+                <LocationDetailRow label="Ottimizzazione" val={loc.piano_riprese.note_ottimizzazione} />
               </div>
             )}
           </div>
@@ -2192,18 +2252,31 @@ function EmptyBreakdownSection({ label }) {
 }
 
 function BreakdownPanel({ data }) {
+  if (!data) return null;
+  const workPlanSource = data.piano_lavoro_suggerito || data.piano_riprese_suggerito;
+  const panelKey = JSON.stringify({
+    sceneNumbers: asArray(data.per_scena).map((scene) => scene.numero),
+    workPlanSource,
+  });
+
+  return (
+    <BreakdownPanelContent
+      key={panelKey}
+      data={data}
+      initialWorkPlan={asArray(workPlanSource)}
+    />
+  );
+}
+
+function BreakdownPanelContent({ data, initialWorkPlan }) {
   const [activeTab, setActiveTab] = useState("riepilogo");
-  const [workPlan, setWorkPlan] = useState([]);
+  const [workPlan, setWorkPlan] = useState(initialWorkPlan);
   const [manualScene, setManualScene] = useState("");
   const [manualTargetDay, setManualTargetDay] = useState("");
   const [shootStartDate, setShootStartDate] = useState("");
   const [shootEndDate, setShootEndDate] = useState("");
   const [shootStartTime, setShootStartTime] = useState("10:00");
   const [shootEndTime, setShootEndTime] = useState("18:00");
-  useEffect(() => {
-    setWorkPlan(asArray(data?.piano_lavoro_suggerito || data?.piano_riprese_suggerito));
-  }, [data]);
-  if (!data) return null;
   const { riepilogo, per_scena, reparti } = data;
   const sceneByNumber = new Map(asArray(per_scena).map((scene) => [Number(scene.numero), scene]));
   const castItems = normalizeBreakdownCast(reparti, per_scena);
@@ -2762,6 +2835,17 @@ function BreakdownPanel({ data }) {
 }
 
 // ─── App principale ───────────────────────────────────────────────────────────
+const readInputFile = async (f) => {
+  const ext = f.name.split(".").pop().toLowerCase();
+  if (ext === "txt") return await f.text();
+  if (ext === "docx" || ext === "doc") {
+    const buf = await f.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer: buf });
+    return result.value;
+  }
+  throw new Error("Formato non supportato. Usa TXT, DOCX o DOC.");
+};
+
 export default function App() {
   const [onboardingComplete, setOnboardingComplete] = useState(() => (
     window.localStorage.getItem(ONBOARDING_STORAGE) === ONBOARDING_FLOW_VERSION
@@ -2793,6 +2877,7 @@ export default function App() {
   const [aiProvider, setAiProvider] = useState("anthropic");
   const [lmStudioEndpoint, setLmStudioEndpoint] = useState(DEFAULT_LM_STUDIO_ENDPOINT);
   const [lmStudioModel, setLmStudioModel] = useState(DEFAULT_LM_STUDIO_MODEL);
+  const [organicOptions, setOrganicOptions] = useState(DEFAULT_ORGANIC_OPTIONS);
   const fileInputRef = useRef();
   const onboardingButtonRef = useRef();
   const dropzoneRef = useRef();
@@ -2987,47 +3072,45 @@ export default function App() {
     return data;
   };
 
-  const readFile = async (f) => {
-    const ext = f.name.split(".").pop().toLowerCase();
-    if (ext === "txt") return await f.text();
-    if (ext === "docx" || ext === "doc") {
-      const buf = await f.arrayBuffer();
-      const result = await mammoth.extractRawText({ arrayBuffer: buf });
-      return result.value;
-    }
-    throw new Error("Formato non supportato. Usa TXT, DOCX o DOC.");
-  };
-
-  const handleFile = async (f) => {
+  const handleFile = useCallback(async (f) => {
     if (!f) return;
     setError(""); setElements(null); setAnalysis(null); setFile(f);
     try {
-      const text = await readFile(f);
+      const text = await readInputFile(f);
       setRawText(text);
     } catch (e) { setError(e.message); }
-  };
+  }, []);
 
   const handleDrop = useCallback((e) => {
     e.preventDefault(); setDragOver(false);
     const f = e.dataTransfer.files[0];
     if (f) handleFile(f);
-  }, []);
+  }, [handleFile]);
 
   const runFormatter = async (mode = "creative") => {
     if (!rawText.trim()) return;
     setLoading(true); setError(""); setElements(null); setAnalysis(null); setCharacterSheets(null); setBreakdown(null); setLocationSheets(null);
     try {
-      setLoadingMsg(mode === "conservative" ? "Parsing conservativo in corso..." : "Formattazione creativa in corso...");
+      const organicInstructions = buildOrganicInstructions(organicOptions);
+      const modeLabel = mode === "conservative"
+        ? "Parsing conservativo"
+        : mode === "organic"
+          ? "Riscrittura organica"
+          : "Formattazione creativa";
+
+      setLoadingMsg(`${modeLabel} in corso...`);
       const formatChunk = async (text, index = 0, total = 1) => {
         if (isLocalAi && total > 1) {
-          setLoadingMsg(`${mode === "conservative" ? "Parsing conservativo" : "Formattazione creativa"} con LM Studio: blocco ${index + 1}/${total}...`);
+          setLoadingMsg(`${modeLabel} con LM Studio: blocco ${index + 1}/${total}...`);
         }
-        const data = await postAiJson(API_FORMAT, { text, mode }, {
+        const data = await postAiJson(API_FORMAT, { text, mode, organicOptions }, {
           system: LOCAL_FORMAT_PROMPTS[mode] || LOCAL_FORMAT_PROMPTS.creative,
           user: mode === "conservative"
             ? `Classifica in modo conservativo il seguente frammento come sceneggiatura cinematografica professionale. Restituisci solo gli elementi ricavati da questo frammento, senza riassumere i frammenti precedenti o successivi:\n\n${text}`
+            : mode === "organic"
+              ? `Rendi piu organico e cinematografico il seguente frammento di sceneggiatura, applicando questi parametri creativi:\n- ${organicInstructions}\n\nRestituisci solo gli elementi della sceneggiatura generati da questo frammento, senza spiegazioni:\n\n${text}`
             : `Adatta ed espandi creativamente il seguente frammento in sceneggiatura cinematografica professionale. Aggiungi materiale nuovo coerente: azioni, dialoghi, dettagli visivi, tensione e raccordi. Restituisci solo gli elementi della sceneggiatura generati da questo frammento, senza spiegazioni:\n\n${text}`,
-          temperature: mode === "conservative" ? 0 : 0.65,
+          temperature: mode === "conservative" ? 0 : mode === "organic" ? 0.72 : 0.65,
           output: "array",
         });
         return normalizeElementsPayload(data, isLocalAi);
@@ -3227,6 +3310,9 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
   const canAnalyze      = !!elements && !busy;
   const canRunSheets    = !!elements && !busy;
   const canRunBreakdown = !!elements && !busy;
+  const updateOrganicOption = (key, value) => {
+    setOrganicOptions((current) => ({ ...current, [key]: value }));
+  };
 
   const stats = elements ? {
     scene:     elements.filter(isRealSceneHeading).length,
@@ -3256,11 +3342,15 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
     keyInput:   { width: "100%", background: "rgba(0,0,0,.22)", border: "1px solid rgba(255,255,255,.12)", borderRadius: "6px", color: "#ddd", fontFamily: "monospace", fontSize: "12px", padding: "10px", boxSizing: "border-box" },
     btn:        { background: "linear-gradient(135deg,#c8a96e,#b8994e)", color: "#0a0a0f", border: "none", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canFormat ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canFormat ? 1 : 0.4 },
     btnConservative: { background: canFormat ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.03)", color: canFormat ? "#e8e8f0" : "#777", border: "1px solid rgba(255,255,255,.14)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canFormat ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canFormat ? 1 : 0.45 },
+    btnOrganic: { background: canFormat ? "linear-gradient(135deg,#4FC3F7,#087EA4)" : "rgba(79,195,247,.12)", color: canFormat ? "#041016" : "#4FC3F7", border: "1px solid rgba(79,195,247,.42)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canFormat ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canFormat ? 1 : 0.5 },
     btnAnalyze: { background: canAnalyze ? "linear-gradient(135deg,#7C4DFF,#651FFF)" : "rgba(124,77,255,.15)", color: canAnalyze ? "#fff" : "#7C4DFF", border: "1px solid rgba(124,77,255,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canAnalyze ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canAnalyze ? 1 : 0.5 },
     btnSheets:    { background: canRunSheets ? "linear-gradient(135deg,#00897B,#00695C)" : "rgba(0,137,123,.15)", color: canRunSheets ? "#fff" : "#00897B", border: "1px solid rgba(0,137,123,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canRunSheets ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canRunSheets ? 1 : 0.5 },
     btnBreakdown: { background: canRunBreakdown ? "linear-gradient(135deg,#E65100,#BF360C)" : "rgba(230,81,0,.15)", color: canRunBreakdown ? "#fff" : "#E65100", border: "1px solid rgba(230,81,0,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canRunBreakdown ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canRunBreakdown ? 1 : 0.5 },
     btnLocations: { background: !busy ? "linear-gradient(135deg,#0277BD,#01579B)" : "rgba(2,119,189,.15)", color: !busy ? "#fff" : "#0277BD", border: "1px solid rgba(2,119,189,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: !busy ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: !busy ? 1 : 0.5 },
     btnSec:     { background: "rgba(255,255,255,.06)", color: "#ccc", border: "1px solid rgba(255,255,255,.12)", borderRadius: "8px", padding: "10px 16px", fontSize: "13px", cursor: "pointer", fontFamily: "sans-serif", flex: 1 },
+    organicPanel: { background: "rgba(79,195,247,.055)", border: "1px solid rgba(79,195,247,.18)", borderRadius: "8px", padding: "12px", display: "flex", flexDirection: "column", gap: "10px" },
+    organicSelect: { width: "100%", background: "rgba(0,0,0,.22)", border: "1px solid rgba(255,255,255,.12)", borderRadius: "6px", color: "#ddd", fontFamily: "sans-serif", fontSize: "12px", padding: "9px", boxSizing: "border-box" },
+    organicCheck: { display: "flex", alignItems: "center", gap: "7px", color: "#bbb", fontFamily: "sans-serif", fontSize: "12px", lineHeight: "1.35" },
     content:    { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" },
     tabs:       { display: "flex", padding: "16px 24px 0", borderBottom: "1px solid rgba(255,255,255,.06)", gap: "4px" },
     previewWrap:{ flex: 1, overflowY: "auto", background: "#f5f5f0" },
@@ -3455,6 +3545,46 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
             <button style={s.btn} disabled={!canFormat} onClick={() => runFormatter("creative")}>
               {loading ? "Formattazione in corso..." : "Formattazione Creativa"}
             </button>
+            <div style={s.organicPanel}>
+              <div style={s.label}>Intervento creativo</div>
+              <select
+                value={organicOptions.genre}
+                onChange={(e) => updateOrganicOption("genre", e.target.value)}
+                style={s.organicSelect}
+              >
+                <option value="neutral">Rendi piu organica</option>
+                <option value="crime">Rendi piu crime</option>
+                <option value="thriller">Rendi piu thriller</option>
+                <option value="noir">Rendi piu noir</option>
+                <option value="drama">Rendi piu drammatica</option>
+                <option value="comedy">Rendi piu commedia</option>
+              </select>
+              <label style={s.organicCheck}>
+                <input
+                  type="checkbox"
+                  checked={organicOptions.surprise}
+                  onChange={(e) => updateOrganicOption("surprise", e.target.checked)}
+                />
+                Aggiungi un elemento sorpresa
+              </label>
+              <label style={s.organicCheck}>
+                <input
+                  type="checkbox"
+                  checked={organicOptions.newCharacter}
+                  onChange={(e) => updateOrganicOption("newCharacter", e.target.checked)}
+                />
+                Aggiungi un personaggio
+              </label>
+              <textarea
+                value={organicOptions.note}
+                onChange={(e) => updateOrganicOption("note", e.target.value)}
+                placeholder="Nota libera: es. piu tensione tra madre e figlio, finale meno esplicito..."
+                style={{ ...s.keyInput, minHeight: "62px", resize: "vertical", fontFamily: "sans-serif" }}
+              />
+              <button style={s.btnOrganic} disabled={!canFormat} onClick={() => runFormatter("organic")}>
+                {loading ? "Riscrittura in corso..." : "Rendi più organica"}
+              </button>
+            </div>
           </div>
 
           {/* Pulsanti AI — appaiono solo dopo la formattazione */}

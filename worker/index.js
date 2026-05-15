@@ -43,9 +43,74 @@ REGOLE DI NEUTRALITA:
 
 OUTPUT: Restituisci SOLO l'array JSON, senza markdown, senza backtick, senza spiegazioni.`;
 
+const ORGANIC_FORMAT_SYSTEM_PROMPT = `Sei un esperto sceneggiatore cinematografico, script doctor e story editor. Il tuo compito è rendere un testo grezzo o una sceneggiatura piu organica, coerente e cinematografica, applicando i parametri creativi richiesti dall'utente. Restituisci ESCLUSIVAMENTE un array JSON valido con gli elementi della sceneggiatura.
+
+REGOLE DI CLASSIFICAZIONE:
+- Usa solo questi tipi: "scene_heading", "action", "character", "parenthetical", "dialogue", "transition", "title", "blank".
+- Le intestazioni di scena devono essere in maiuscolo e in formato INT./EST. LUOGO - GIORNO/NOTTE quando possibile.
+- I nomi personaggio devono essere in maiuscolo e senza punteggiatura finale.
+- Le azioni devono essere in presente indicativo, visive, concrete e cinematografiche.
+
+REGOLE DI RISCRITTURA ORGANICA:
+- Migliora raccordi, motivazioni, progressione causa-effetto, ritmo, conflitto e continuita emotiva.
+- Applica solo i parametri creativi richiesti dall'utente: sorpresa, nuovo personaggio, virata di genere, tono o note libere.
+- Se aggiungi un personaggio, dagli una funzione drammaturgica chiara e non decorativa.
+- Se aggiungi un elemento sorpresa, preparalo con piccoli indizi e integralo nella scena senza effetto casuale.
+- Se cambi genere o tono, riscrivi atmosfera, dettagli, conflitto e dialoghi in modo coerente.
+- Mantieni lingua originale, nucleo della storia e personaggi gia presenti.
+- Non spiegare le modifiche: restituisci direttamente la nuova sceneggiatura strutturata.
+
+OUTPUT: Restituisci SOLO l'array JSON, senza markdown, senza backtick, senza spiegazioni.`;
+
 const getFormatSystemPrompt = (mode) => (
-  mode === "conservative" ? CONSERVATIVE_FORMAT_SYSTEM_PROMPT : CREATIVE_FORMAT_SYSTEM_PROMPT
+  mode === "conservative"
+    ? CONSERVATIVE_FORMAT_SYSTEM_PROMPT
+    : mode === "organic"
+      ? ORGANIC_FORMAT_SYSTEM_PROMPT
+      : CREATIVE_FORMAT_SYSTEM_PROMPT
 );
+
+const ORGANIC_GENRE_LABELS = {
+  neutral: "piu organica e fluida",
+  crime: "piu crime",
+  thriller: "piu thriller",
+  noir: "piu noir",
+  comedy: "piu commedia",
+  drama: "piu drammatica",
+};
+
+const normalizeOrganicOptions = (options = {}) => ({
+  genre: ORGANIC_GENRE_LABELS[options.genre] ? options.genre : "neutral",
+  surprise: options.surprise !== false,
+  newCharacter: options.newCharacter === true,
+  note: typeof options.note === "string" ? options.note.trim().slice(0, 600) : "",
+});
+
+const buildOrganicInstructions = (options = {}) => {
+  const normalized = normalizeOrganicOptions(options);
+  const instructions = [
+    `Direzione: rendi lo script ${ORGANIC_GENRE_LABELS[normalized.genre]}.`,
+    "Rendi la sceneggiatura piu organica: raccorda meglio le scene, rafforza motivazioni, conflitto, ritmo, sottotesto e continuita emotiva.",
+  ];
+
+  if (normalized.surprise) {
+    instructions.push("Aggiungi un elemento sorpresa integrato nella storia, preparato con piccoli indizi e non come svolta casuale.");
+  }
+
+  if (normalized.newCharacter) {
+    instructions.push("Aggiungi un nuovo personaggio con funzione drammaturgica precisa, capace di modificare relazioni, conflitto o posta in gioco.");
+  }
+
+  if (normalized.genre === "crime") {
+    instructions.push("Rendi lo script piu crime: inserisci indizi, ambiguita morale, pressione investigativa, posta in gioco concreta e dettagli di ambiente coerenti.");
+  }
+
+  if (normalized.note) {
+    instructions.push(`Nota libera dell'autore: ${normalized.note}`);
+  }
+
+  return instructions.join("\n- ");
+};
 
 const ANALYZE_SYSTEM_PROMPT = `Sei un dramaturg e docente di sceneggiatura cinematografica con 30 anni di esperienza nell'insegnamento e nella produzione. Il tuo compito è analizzare una sceneggiatura in formato JSON (array di elementi tipizzati) e restituire ESCLUSIVAMENTE un oggetto JSON valido con l'analisi drammaturgica completa.
 
@@ -585,7 +650,7 @@ const validateScreenplayInput = (text, mode = "creative") => {
     };
   }
 
-  if (mode === "creative") {
+  if (mode === "creative" || mode === "organic") {
     return { ok: true };
   }
 
@@ -676,7 +741,10 @@ const handleFormat = async (request, env) => {
     const rawBody = await request.text();
     const parsedBody = safeJsonParse(rawBody || "{}");
     const text = typeof parsedBody?.text === "string" ? parsedBody.text : "";
-    const mode = parsedBody?.mode === "conservative" ? "conservative" : "creative";
+    const mode = ["conservative", "creative", "organic"].includes(parsedBody?.mode)
+      ? parsedBody.mode
+      : "creative";
+    const organicInstructions = buildOrganicInstructions(parsedBody?.organicOptions);
 
     if (!text || text.trim().length < 10) {
       return jsonResponse({ error: "Testo troppo breve o assente." }, 400);
@@ -706,13 +774,15 @@ const handleFormat = async (request, env) => {
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 8000,
-        temperature: mode === "conservative" ? 0 : 0.65,
+        temperature: mode === "conservative" ? 0 : mode === "organic" ? 0.72 : 0.65,
         system: getFormatSystemPrompt(mode),
         messages: [
           {
             role: "user",
             content: mode === "conservative"
               ? `Classifica in modo conservativo il seguente testo come sceneggiatura cinematografica professionale:\n\n${text}`
+              : mode === "organic"
+                ? `Rendi piu organico e cinematografico il seguente testo, applicando questi parametri creativi:\n- ${organicInstructions}\n\nRestituisci solo la sceneggiatura strutturata in elementi JSON, senza spiegazioni:\n\n${text}`
               : `Adatta ed espandi creativamente il seguente testo in sceneggiatura cinematografica professionale. Aggiungi materiale nuovo coerente: azioni, dialoghi, dettagli visivi, tensione, raccordi e sviluppo drammaturgico. Non limitarti a riclassificare: costruisci una scena o sequenza piu completa a partire dal documento:\n\n${text}`,
           },
         ],

@@ -43,9 +43,43 @@ REGOLE DI NEUTRALITA:
 
 OUTPUT: Restituisci SOLO l'array JSON, senza markdown, senza backtick, senza spiegazioni.`;
 
+const ORGANIC_SYSTEM_PROMPT = `Sei un esperto sceneggiatore cinematografico, script doctor e story editor. Il tuo compito è rendere un testo grezzo o una sceneggiatura piu organica, coerente e cinematografica, applicando i parametri creativi richiesti dall'utente.
+
+Regole:
+- Usa solo questi tipi: "scene_heading", "action", "character", "parenthetical", "dialogue", "transition", "title", "blank".
+- Migliora raccordi, motivazioni, progressione causa-effetto, ritmo, conflitto e continuita emotiva.
+- Se aggiungi un personaggio, dagli una funzione drammaturgica chiara e non decorativa.
+- Se aggiungi un elemento sorpresa, preparalo con piccoli indizi e integralo nella scena senza effetto casuale.
+- Se cambi genere o tono, riscrivi atmosfera, dettagli, conflitto e dialoghi in modo coerente.
+- Mantieni lingua originale, nucleo della storia e personaggi gia presenti.
+
+OUTPUT: Restituisci SOLO l'array JSON, senza markdown, senza backtick, senza spiegazioni.`;
+
 const getSystemPrompt = (mode) => (
-  mode === "conservative" ? CONSERVATIVE_SYSTEM_PROMPT : CREATIVE_SYSTEM_PROMPT
+  mode === "conservative" ? CONSERVATIVE_SYSTEM_PROMPT : mode === "organic" ? ORGANIC_SYSTEM_PROMPT : CREATIVE_SYSTEM_PROMPT
 );
+
+const ORGANIC_GENRE_LABELS = {
+  neutral: "piu organica e fluida",
+  crime: "piu crime",
+  thriller: "piu thriller",
+  noir: "piu noir",
+  comedy: "piu commedia",
+  drama: "piu drammatica",
+};
+
+const buildOrganicInstructions = (options = {}) => {
+  const genre = ORGANIC_GENRE_LABELS[options.genre] ? options.genre : "neutral";
+  const instructions = [
+    `Direzione: rendi lo script ${ORGANIC_GENRE_LABELS[genre]}.`,
+    "Rendi la sceneggiatura piu organica: raccorda meglio le scene, rafforza motivazioni, conflitto, ritmo, sottotesto e continuita emotiva.",
+  ];
+  if (options.surprise !== false) instructions.push("Aggiungi un elemento sorpresa integrato nella storia, preparato con piccoli indizi e non come svolta casuale.");
+  if (options.newCharacter === true) instructions.push("Aggiungi un nuovo personaggio con funzione drammaturgica precisa.");
+  if (genre === "crime") instructions.push("Rendi lo script piu crime: inserisci indizi, ambiguita morale, pressione investigativa e dettagli di ambiente coerenti.");
+  if (typeof options.note === "string" && options.note.trim()) instructions.push(`Nota libera dell'autore: ${options.note.trim().slice(0, 600)}`);
+  return instructions.join("\n- ");
+};
 
 export const handler = async (event) => {
   // Solo POST
@@ -66,8 +100,9 @@ export const handler = async (event) => {
   }
 
   try {
-    const { text, mode: rawMode } = JSON.parse(event.body || '{}')
-    const mode = rawMode === 'conservative' ? 'conservative' : 'creative'
+    const { text, mode: rawMode, organicOptions } = JSON.parse(event.body || '{}')
+    const mode = ['conservative', 'creative', 'organic'].includes(rawMode) ? rawMode : 'creative'
+    const organicInstructions = buildOrganicInstructions(organicOptions)
     if (!text || text.trim().length < 10) {
       return {
         statusCode: 400,
@@ -99,7 +134,11 @@ export const handler = async (event) => {
         messages: [
           {
             role: 'user',
-            content: `${mode === 'conservative' ? 'Classifica in modo conservativo' : 'Analizza e formatta'} il seguente testo come sceneggiatura cinematografica professionale:\n\n${text}`,
+            content: mode === 'conservative'
+              ? `Classifica in modo conservativo il seguente testo come sceneggiatura cinematografica professionale:\n\n${text}`
+              : mode === 'organic'
+                ? `Rendi piu organico e cinematografico il seguente testo, applicando questi parametri creativi:\n- ${organicInstructions}\n\nRestituisci solo la sceneggiatura strutturata in elementi JSON, senza spiegazioni:\n\n${text}`
+                : `Analizza e formatta il seguente testo come sceneggiatura cinematografica professionale:\n\n${text}`,
           },
         ],
       }),
