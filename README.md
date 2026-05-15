@@ -22,7 +22,7 @@ Moduli previsti:
 
 ## Cosa Fa
 
-- Importa testi `.txt` e `.docx`
+- Importa testi `.txt`, `.docx` e PDF con testo selezionabile
 - Accetta anche testo incollato direttamente nella textarea
 - Integra il modulo **Crea la tua storia** raggiungibile dalla home e dalla rotta `/crea-la-tua-storia/`
 - Permette di creare una storia guidata, esportarla in PDF/TXT e caricarla direttamente nella formattazione creativa di DeepFrame
@@ -217,6 +217,7 @@ https://lumina-studio-1033723633880.us-west1.run.app/
 
 - Frontend: React + Vite
 - Parsing DOCX: Mammoth
+- Parsing PDF: PDF.js caricato on demand dal browser
 - Riparazione JSON AI: jsonrepair
 - Backend: Cloudflare Worker
 - Hosting: Cloudflare Workers Static Assets
@@ -231,6 +232,7 @@ Input:
 | `.txt` | Testo semplice |
 | `.docx` | Documento Word moderno |
 | `.doc` | Non supportato in modo affidabile: convertire prima in `.docx` |
+| `.pdf` | Supportato quando contiene testo selezionabile; i PDF scansionati richiedono prima OCR |
 
 Output:
 

@@ -22,6 +22,8 @@ const DEFAULT_LM_STUDIO_MODEL = "gemma-4";
 const ONBOARDING_STORAGE = "screenplayFormatter.onboardingComplete";
 const APP_TOUR_STORAGE = "screenplayFormatter.appTourComplete";
 const ONBOARDING_FLOW_VERSION = "landing-before-tour-v1";
+const PDFJS_CDN_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs";
+const PDFJS_WORKER_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
 
 // ─── Colori per tipi elemento ───────────────────────────────────────────────
 const typeLabels = {
@@ -1065,7 +1067,7 @@ const APP_GUIDED_STEP_COPY = [
   },
   {
     title: "Carica il tuo file",
-    text: "Trascina qui TXT, DOCX o DOC. Il sistema accetta solo testi che sembrano sceneggiature.",
+      text: "Trascina qui TXT, DOCX, DOC o PDF. Il sistema accetta solo testi che sembrano sceneggiature.",
     color: "#8B5CF6",
     target: "dropzone",
   },
@@ -2835,6 +2837,50 @@ function BreakdownPanelContent({ data, initialWorkPlan }) {
 }
 
 // ─── App principale ───────────────────────────────────────────────────────────
+let pdfJsPromise = null;
+
+const loadPdfJs = async () => {
+  if (globalThis.pdfjsLib?.getDocument) {
+    globalThis.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+    return globalThis.pdfjsLib;
+  }
+
+  if (!pdfJsPromise) {
+    pdfJsPromise = import(/* @vite-ignore */ PDFJS_CDN_URL).then((module) => {
+      const pdfjsLib = module.default?.getDocument ? module.default : module;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+      return pdfjsLib;
+    });
+  }
+
+  return pdfJsPromise;
+};
+
+const readPdfInputFile = async (f) => {
+  const pdfjsLib = await loadPdfJs();
+  const arrayBuffer = await f.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pages = [];
+
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items
+      .map((item) => ("str" in item ? item.str : ""))
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (pageText) pages.push(pageText);
+  }
+
+  const text = pages.join("\n\n").trim();
+  if (!text) {
+    throw new Error("Il PDF non contiene testo selezionabile. Se è una scansione, serve prima un passaggio OCR.");
+  }
+
+  return text;
+};
+
 const readInputFile = async (f) => {
   const ext = f.name.split(".").pop().toLowerCase();
   if (ext === "txt") return await f.text();
@@ -2843,7 +2889,8 @@ const readInputFile = async (f) => {
     const result = await mammoth.extractRawText({ arrayBuffer: buf });
     return result.value;
   }
-  throw new Error("Formato non supportato. Usa TXT, DOCX o DOC.");
+  if (ext === "pdf" || f.type === "application/pdf") return await readPdfInputFile(f);
+  throw new Error("Formato non supportato. Usa TXT, DOCX, DOC o PDF.");
 };
 
 export default function App() {
@@ -3407,10 +3454,10 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
             <div style={{ fontSize: "36px", marginBottom: "8px" }}>📄</div>
             <div style={{ fontSize: "13px", color: "#aaa", fontFamily: "sans-serif", lineHeight: "1.6" }}>
               Trascina qui il tuo file<br />
-              <strong style={{ color: "#c8a96e" }}>TXT · DOCX · DOC</strong><br />
+              <strong style={{ color: "#c8a96e" }}>TXT · DOCX · DOC · PDF</strong><br />
               <span style={{ fontSize: "11px", opacity: .6 }}>oppure clicca per sfogliare</span>
             </div>
-            <input ref={fileInputRef} type="file" accept=".txt,.docx,.doc" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files[0])} />
+            <input ref={fileInputRef} type="file" accept=".txt,.docx,.doc,.pdf,application/pdf" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files[0])} />
           </div>
 
           {file && (
