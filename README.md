@@ -265,7 +265,7 @@ Input:
 | --- | --- |
 | `.txt` | Testo semplice |
 | `.docx` | Documento Word moderno |
-| `.doc` | Non supportato in modo affidabile: convertire prima in `.docx` |
+| `.doc` | Non leggibile direttamente dal browser: convertire prima in `.docx`, `.txt` o PDF con testo selezionabile |
 | `.pdf` | Supportato quando contiene testo selezionabile; i PDF scansionati richiedono prima OCR |
 
 Output:

@@ -1512,7 +1512,7 @@ const APP_GUIDED_STEP_COPY = [
   },
   {
     title: "Carica il tuo file",
-      text: "Trascina qui TXT, DOCX, DOC o PDF. Il sistema accetta solo testi che sembrano sceneggiature.",
+      text: "Trascina qui TXT, DOCX o PDF. I vecchi DOC vanno prima convertiti in DOCX.",
     color: "#8B5CF6",
     target: "dropzone",
   },
@@ -3370,13 +3370,24 @@ const readPdfInputFile = async (f) => {
 const readInputFile = async (f) => {
   const ext = f.name.split(".").pop().toLowerCase();
   if (ext === "txt") return await f.text();
-  if (ext === "docx" || ext === "doc") {
-    const buf = await f.arrayBuffer();
-    const result = await mammoth.extractRawText({ arrayBuffer: buf });
-    return result.value;
+  if (ext === "doc") {
+    throw new Error("I vecchi file .doc non sono leggibili direttamente. Apri il documento in Word/LibreOffice e salvalo come .docx, oppure esportalo in PDF con testo selezionabile o TXT.");
+  }
+  if (ext === "docx") {
+    try {
+      const buf = await f.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer: buf });
+      return result.value;
+    } catch (error) {
+      const message = String(error?.message || "");
+      if (message.includes("central directory") || message.includes("zip")) {
+        throw new Error("Questo file non sembra un .docx valido. Se è un vecchio .doc o un file rinominato, convertilo prima in .docx, PDF con testo selezionabile o TXT.");
+      }
+      throw new Error(`Non riesco a leggere il DOCX: ${message || "file non valido"}`);
+    }
   }
   if (ext === "pdf" || f.type === "application/pdf") return await readPdfInputFile(f);
-  throw new Error("Formato non supportato. Usa TXT, DOCX, DOC o PDF.");
+  throw new Error("Formato non supportato. Usa TXT, DOCX o PDF con testo selezionabile.");
 };
 
 export default function App() {
@@ -4038,7 +4049,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
             <div style={{ fontSize: "36px", marginBottom: "8px" }}>📄</div>
             <div style={{ fontSize: "13px", color: "#aaa", fontFamily: "sans-serif", lineHeight: "1.6" }}>
               Trascina qui il tuo file<br />
-              <strong style={{ color: "#c8a96e" }}>TXT · DOCX · DOC · PDF</strong><br />
+              <strong style={{ color: "#c8a96e" }}>TXT · DOCX · PDF</strong><br />
               <span style={{ fontSize: "11px", opacity: .6 }}>oppure clicca per sfogliare</span>
             </div>
             <input ref={fileInputRef} type="file" accept=".txt,.docx,.doc,.pdf,application/pdf" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files[0])} />
