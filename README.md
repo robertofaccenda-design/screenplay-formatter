@@ -90,6 +90,7 @@ La formattazione creativa non si limita piu a riclassificare una storia come sce
 Correzioni importanti:
 
 - con LM Studio i testi lunghi vengono divisi in blocchi per ridurre rifiuti o errori di contesto;
+- se LM Studio rifiuta un blocco di formattazione, DeepFrame lo divide ulteriormente e riprova in modo adattivo;
 - la riparazione JSON gestisce anche array malformati prodotti da modelli locali;
 - il conteggio scene riconosce come scene solo intestazioni reali `INT`, `EST`, `INT/EST`, `EXT`, evitando di numerare titoli o atti.
 
@@ -113,6 +114,28 @@ INT. CASA - NOTTE
 EST. STRADA - GIORNO
 EXT. PARKING LOT - NIGHT
 ```
+
+Sono riconosciute anche intestazioni compatte o numerate come:
+
+```text
+1.INT - CASA - GIORNO
+1. INT - CASA - GIORNO
+2. EST STRADA - NOTTE
+12A.EXT PARKING LOT - NIGHT
+```
+
+### Robustezza LM Studio
+
+Quando si usa LM Studio locale, DeepFrame applica alcune protezioni per evitare blocchi lunghi o errori JSON:
+
+- formattazione e parsing vengono divisi in blocchi piccoli;
+- i blocchi rifiutati da LM Studio vengono divisi ancora e ritentati;
+- Analisi Drammaturgica su script lunghi viene divisa in blocchi di scene;
+- ogni blocco di analisi ha un timeout;
+- se LM Studio restituisce JSON non valido, DeepFrame usa un fallback locale per mantenere attiva la dashboard;
+- le Schede Personaggio hanno un fallback locale basato su personaggi, scene e battute riconosciute.
+
+I fallback locali non sostituiscono una vera analisi AI completa, ma impediscono al workflow di bloccarsi quando il modello locale è lento, instabile o poco affidabile nel JSON.
 
 ### Breakdown Reparti
 
@@ -139,6 +162,11 @@ Il **Piano di lavoro** ora permette:
 - orario giornaliero di inizio e fine;
 - modifica manuale di data e orario per ogni giornata;
 - avviso se il numero di giornate supera la finestra di date impostata.
+
+Nota sul piano iniziale:
+
+- se il modello AI produce un piano troppo frammentato, ad esempio una scena per giornata, DeepFrame lo scarta e ricalcola automaticamente un piano iniziale più produttivo accorpando per location;
+- il piano resta una stima iniziale e va rifinito con i vincoli reali di produzione.
 
 ### Export PDF Operativi
 

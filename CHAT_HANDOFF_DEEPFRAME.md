@@ -445,6 +445,213 @@ index-Cf8jM58H.js
 index-Cz2_zqgM.js
 ```
 
+## Aggiornamento 2026-05-16: Intervento creativo organico
+
+È stato aggiunto un nuovo flusso accanto a **Formattazione Creativa**:
+
+- pannello **Intervento creativo**;
+- selettore tono/genere:
+  - rendi piu organica;
+  - rendi piu crime;
+  - rendi piu thriller;
+  - rendi piu noir;
+  - rendi piu drammatica;
+  - rendi piu commedia;
+- opzioni:
+  - aggiungi un elemento sorpresa;
+  - aggiungi un personaggio;
+  - nota libera dell'autore.
+
+Implementazione:
+
+- nuovo `mode: "organic"` per il formatter;
+- supporto sia su LM Studio locale sia su endpoint Cloudflare/Netlify;
+- prompt dedicato per rendere lo script piu organico senza tradire nucleo narrativo, lingua e personaggi esistenti.
+
+Commit pubblicato:
+
+```text
+a774103 Add guided organic screenplay rewrite mode
+```
+
+Verifica live completata su Cloudflare: il bundle pubblicato contiene `Intervento creativo`, `Rendi più organica` e `Rendi piu crime`.
+
+## Aggiornamento 2026-05-16: PDF come input di parsing
+
+DeepFrame Script ora supporta il caricamento di file `.pdf` nella dropzone principale, oltre a `.txt`, `.docx` e `.doc`.
+
+Comportamento:
+
+- il PDF viene letto lato browser;
+- PDF.js viene caricato on demand da CDN solo quando serve leggere un PDF;
+- il testo estratto viene inserito nella textarea e segue lo stesso workflow degli altri input;
+- i PDF con testo selezionabile sono supportati;
+- i PDF scansionati o fotografici non producono testo utile e richiedono prima OCR;
+- il messaggio utente segnala esplicitamente quando il PDF non contiene testo selezionabile.
+
+File modificati:
+
+- `/Users/Robjhon/Documents/github/screenplay-formatter/src/App.jsx`
+- `/Users/Robjhon/Documents/github/screenplay-formatter/README.md`
+
+Verifiche effettuate:
+
+```text
+npm run lint
+npm run build
+```
+
+Commit locale preparato:
+
+```text
+5a901fa Add PDF input support for screenplay parsing
+```
+
+Stato deploy:
+
+- commit `5a901fa` pushato su `origin/master`;
+- verifica successiva: Cloudflare Worker live contiene il supporto PDF nel bundle pubblicato.
+
+## Aggiornamento 2026-05-16: caricamento sceneggiatura gia formattata senza AI
+
+È stato aggiunto un nuovo flusso per importare una sceneggiatura gia formattata senza passare da Anthropic o LM Studio.
+
+Comportamento:
+
+- nuovo pulsante **Carica gia formattata senza AI** nella sidebar;
+- nessuna chiamata a `/api/format`;
+- nessun intervento creativo o riscrittura;
+- classificazione locale deterministica in elementi `scene_heading`, `action`, `character`, `dialogue`, `parenthetical`, `transition`, `title`, `blank`;
+- dopo il caricamento vengono sbloccati anteprima, struttura, export, Analisi Drammaturgica, Schede Personaggio, Schede Location e Breakdown Reparti;
+- se il testo non contiene intestazioni tipo `INT.`, `EST.` o `EXT.`, l'app segnala di usare Formattazione Creativa.
+
+Miglioria collegata:
+
+- l'estrazione PDF lato browser ora prova a ricostruire le righe usando le coordinate PDF.js, utile per sceneggiature PDF con testo selezionabile.
+
+File modificati:
+
+- `/Users/Robjhon/Documents/github/screenplay-formatter/src/App.jsx`
+- `/Users/Robjhon/Documents/github/screenplay-formatter/README.md`
+- `/Users/Robjhon/Documents/github/screenplay-formatter/CHAT_HANDOFF_DEEPFRAME.md`
+
+Verifiche effettuate:
+
+```text
+npm run lint
+npm run build
+```
+
+Commit pubblicati collegati:
+
+```text
+25bea09 Add direct formatted screenplay import
+066be15 Accept compact numbered scene headings
+```
+
+Dettaglio fix successivo:
+
+- riconosciute intestazioni scena compatte/numerate tipo `1.INT`, `1. INT`, `2. EST`, `12A.EXT`;
+- questo evita che il caricamento senza AI fallisca quando il copione numerato non usa il punto standard dopo INT/EST.
+
+## Aggiornamento 2026-05-16: robustezza LM Studio
+
+Sono stati aggiunti diversi fallback per rendere LM Studio locale meno fragile su script lunghi.
+
+Problemi osservati:
+
+- LM Studio rifiutava richieste troppo lunghe con messaggio generico;
+- Analisi Drammaturgica poteva produrre JSON non valido (`Colon expected`);
+- Analisi Drammaturgica poteva restare appesa per molti minuti;
+- Schede Personaggio poteva superare il timeout;
+- modelli locali poco stabili generano spesso JSON incompleto o non riparabile.
+
+Fix applicati:
+
+- Formattazione/Parsing LM Studio:
+  - chunk iniziale ridotto;
+  - retry adattivo: se un blocco viene rifiutato, viene diviso ulteriormente e ritentato.
+- Analisi Drammaturgica:
+  - divisione in blocchi di scene;
+  - timeout per richiesta locale;
+  - budget massimo complessivo;
+  - fallback locale per i blocchi che producono JSON non valido o non rispondono in tempo.
+- Schede Personaggio:
+  - payload alleggerito;
+  - timeout dedicato;
+  - fallback locale basato su personaggi, scene, battute e citazione rappresentativa.
+
+Commit pubblicati:
+
+```text
+7e67f48 Chunk LM Studio dramaturgical analysis
+3ead7c0 Fallback local analysis for invalid LM Studio JSON
+a8dbdd4 Timeout long LM Studio analysis requests
+e1031db Fallback local character sheets for LM Studio timeout
+069c0c0 Adaptively split LM Studio formatting chunks
+```
+
+Verifiche effettuate:
+
+```text
+npm run lint
+npm run build
+```
+
+## Aggiornamento 2026-05-16: Piano di lavoro meno frammentato
+
+Problema osservato:
+
+- su un film reale girato in 34 giorni, il piano automatico poteva proporre 112 giornate perché prendeva quasi alla lettera il `piano_lavoro_suggerito` dell'AI;
+- in pratica l'AI stava generando una giornata per scena.
+
+Fix applicato:
+
+- se il piano AI iniziale è palesemente troppo frammentato, DeepFrame lo scarta;
+- l'app ricalcola automaticamente un piano iniziale accorpando per location;
+- i pulsanti **Accorpa per Location / INT-EST / Attori / Complessità** restano disponibili per ricalcoli manuali;
+- il piano resta una stima iniziale da rifinire con vincoli reali di produzione.
+
+Commit pubblicato:
+
+```text
+35fb7b3 Cap over-fragmented breakdown work plans
+```
+
+Verifiche effettuate:
+
+```text
+npm run lint
+npm run build
+```
+
+## Aggiornamento 2026-05-16: gestione DOC/DOCX più chiara
+
+Problema osservato:
+
+```text
+Can't find end of central directory : is this a zip file ?
+```
+
+Causa:
+
+- Mammoth legge bene i `.docx`, che internamente sono zip;
+- i vecchi `.doc` non sono zip e non sono leggibili direttamente dal browser con Mammoth;
+- lo stesso errore può comparire con file rinominati `.docx` ma non realmente validi.
+
+Fix applicato:
+
+- i `.doc` non vengono più passati a Mammoth;
+- l'app mostra un messaggio chiaro: convertire prima in `.docx`, `.txt` o PDF con testo selezionabile;
+- intercettato anche il caso `.docx` corrotto o rinominato male;
+- UI e README aggiornati per indicare `TXT · DOCX · PDF`.
+
+Commit pubblicato:
+
+```text
+f306244 Show friendly unsupported DOC error
+```
+
 ## File importanti citati
 
 - `/Users/Robjhon/Documents/github/screenplay-formatter/src/App.jsx`
