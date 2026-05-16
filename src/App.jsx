@@ -840,6 +840,82 @@ const buildMergedStructure = (totalScenes) => {
   };
 };
 
+const buildFallbackAnalysis = (elements = [], note = "Analisi locale generata senza risposta JSON valida del modello.") => {
+  const scenes = [];
+  const characterStats = new Map();
+  let currentScene = null;
+  let currentCharacter = "";
+
+  elements.forEach((element) => {
+    if (isRealSceneHeading(element)) {
+      currentScene = {
+        numero: scenes.length + 1,
+        titolo: element.content,
+        conflitto: "medio",
+        funzione: scenes.length === 0 ? "esposizione" : "sviluppo",
+        problemi: [],
+        nota: "Voce generata localmente per mantenere attiva la dashboard quando LM Studio restituisce JSON non valido.",
+      };
+      scenes.push(currentScene);
+      currentCharacter = "";
+      return;
+    }
+
+    if (element?.type === "character") {
+      currentCharacter = String(element.content || "").trim().toUpperCase();
+      if (!currentCharacter) return;
+      const stats = characterStats.get(currentCharacter) || {
+        nome: currentCharacter,
+        battute: 0,
+        arco: "assente",
+        analisi_arco: "Da approfondire con una nuova analisi AI o revisione manuale.",
+        tipi_conflitto: [],
+        presenza_scene: 0,
+        nota_docente: "Personaggio rilevato localmente dagli elementi character.",
+        scene: new Set(),
+      };
+      if (currentScene) stats.scene.add(currentScene.numero);
+      characterStats.set(currentCharacter, stats);
+      return;
+    }
+
+    if (element?.type === "dialogue" && currentCharacter) {
+      const stats = characterStats.get(currentCharacter);
+      if (stats) stats.battute += 1;
+    }
+  });
+
+  const personaggi = [...characterStats.values()].map(({ scene, ...character }) => ({
+    ...character,
+    presenza_scene: scene.size || character.presenza_scene,
+  }));
+
+  return {
+    struttura: buildMergedStructure(scenes.length),
+    personaggi,
+    analisi_scene: scenes,
+    segnalazioni: [
+      {
+        tipo: "ritmo_irregolare",
+        gravita: "bassa",
+        scena_numero: null,
+        elemento: "LM Studio JSON non valido",
+        spiegazione: note,
+        suggerimento: "Riduci il testo, usa un modello locale piu istruito sul JSON, oppure riprova l'analisi.",
+      },
+    ],
+    valutazione_globale: {
+      punteggio_struttura: 6,
+      punteggio_personaggi: 6,
+      punteggio_dialoghi: 6,
+      punteggio_ritmo: 6,
+      punti_di_forza: ["La sceneggiatura e stata importata e segmentata in scene riconoscibili."],
+      aree_di_miglioramento: ["Analisi qualitativa da rigenerare con un modello che restituisca JSON valido."],
+      commento_docente: note,
+    },
+  };
+};
+
 const mergeLocalAnalysisChunks = (partials, sourceElements = []) => {
   const sceneHeadings = sourceElements.filter(isRealSceneHeading).map((element) => element.content);
   const mergedScenes = [];
@@ -3508,15 +3584,23 @@ export default function App() {
         const partials = [];
         for (let index = 0; index < localChunks.length; index += 1) {
           const chunk = localChunks[index];
-          const data = await postAiJson(API_ANALYZE, { elements: chunk.elements }, {
-            system: LOCAL_ANALYSIS_PROMPTS.analyze,
-            user: `Analizza questo blocco ${index + 1}/${localChunks.length} di una sceneggiatura lunga in formato JSON. Il risultato deve popolare la dashboard per le sole scene presenti in questo blocco. Non lasciare vuoti struttura.atti, analisi_scene, personaggi o valutazione_globale se nel testo ci sono dati disponibili:\n\n${JSON.stringify(chunk.elements)}`,
-            temperature: 0.2,
-          });
-          partials.push({
-            sceneOffset: chunk.sceneOffset,
-            analysis: unwrapLocalPayload(data, ["analysis", "analisi"]) || data,
-          });
+          try {
+            const data = await postAiJson(API_ANALYZE, { elements: chunk.elements }, {
+              system: LOCAL_ANALYSIS_PROMPTS.analyze,
+              user: `Analizza questo blocco ${index + 1}/${localChunks.length} di una sceneggiatura lunga in formato JSON. Il risultato deve popolare la dashboard per le sole scene presenti in questo blocco. Non lasciare vuoti struttura.atti, analisi_scene, personaggi o valutazione_globale se nel testo ci sono dati disponibili:\n\n${JSON.stringify(chunk.elements)}`,
+              temperature: 0.2,
+            });
+            partials.push({
+              sceneOffset: chunk.sceneOffset,
+              analysis: unwrapLocalPayload(data, ["analysis", "analisi"]) || data,
+            });
+          } catch (chunkError) {
+            console.warn(`Analisi LM Studio non valida sul blocco ${index + 1}, uso fallback locale:`, chunkError);
+            partials.push({
+              sceneOffset: chunk.sceneOffset,
+              analysis: buildFallbackAnalysis(chunk.elements, `LM Studio ha prodotto JSON non valido sul blocco ${index + 1}/${localChunks.length}: ${chunkError.message}`),
+            });
+          }
         }
         setAnalysis(mergeLocalAnalysisChunks(partials, elements));
         setActiveTab("analisi");
@@ -3533,6 +3617,13 @@ export default function App() {
       setActiveTab("analisi");
       setAnalyTab("struttura");
     } catch (e) {
+      if (isLocalAi) {
+        console.warn("Analisi LM Studio non valida, uso fallback locale:", e);
+        setAnalysis(buildFallbackAnalysis(elements, `LM Studio non ha restituito JSON valido: ${e.message}`));
+        setActiveTab("analisi");
+        setAnalyTab("struttura");
+        return;
+      }
       setError("Errore analisi: " + e.message);
     } finally {
       setAnalyzing(false);
