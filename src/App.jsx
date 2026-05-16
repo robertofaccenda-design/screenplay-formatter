@@ -647,6 +647,112 @@ const isRealSceneHeading = (element) => (
   && /^(?:\d+\s+)?(?:INT|EST|INT\/EST|INT\.\/EST|I\/E|EXT)\.?\b/i.test(String(element?.content || "").trim())
 );
 
+const SCENE_HEADING_RE = /^(?:\d+[A-Z]?\s+)?(?:INT|EST|INT\/EST|INT\.\/EST|INT-EST|I\/E|EXT)\.?\s+/i;
+const TRANSITION_RE = /^(?:FADE IN|FADE OUT|CUT TO|TAGLIO A|DISSOLVENZA(?:\s+A|\s+IN|\s+OUT)?|FONDUTA(?:\s+AL\s+NERO)?|SMASH CUT TO|MATCH CUT TO|JUMP CUT TO|STACCO A)\s*:?\s*$/i;
+const CHARACTER_SUFFIX_RE = /\s+\((?:V\.O\.|O\.S\.|O\.C\.|F\.C\.|CONT'D|CONTINUED|FUORI CAMPO|VOCE OFF)\)$/i;
+
+const stripInlineSceneNumber = (line) => (
+  line.replace(/^\s*\d+[A-Z]?\s+((?:INT|EST|INT\/EST|INT\.\/EST|INT-EST|I\/E|EXT)\.?\s+.*?)(?:\s+\d+[A-Z]?)?\s*$/i, "$1").trim()
+);
+
+const isSceneHeadingLine = (line) => SCENE_HEADING_RE.test(stripInlineSceneNumber(line));
+const isTransitionLine = (line) => TRANSITION_RE.test(line.trim());
+const isParentheticalLine = (line) => /^\(.+\)$/.test(line.trim());
+
+const isCharacterCueLine = (line, nextLine = "") => {
+  const text = line.trim();
+  const next = nextLine.trim();
+  if (!text || !next || text.length > 42) return false;
+  if (isSceneHeadingLine(text) || isTransitionLine(text) || isParentheticalLine(text)) return false;
+  if (/[.!?]$/.test(text)) return false;
+  const withoutSuffix = text.replace(CHARACTER_SUFFIX_RE, "");
+  if (!/^[\p{Lu}0-9][\p{Lu}0-9 .'’_-]*$/u.test(withoutSuffix)) return false;
+  if (/\b(?:INT|EST|EXT|GIORNO|NOTTE|SCENA|ATTO)\b/i.test(withoutSuffix) && withoutSuffix.split(/\s+/).length > 2) return false;
+  return !isSceneHeadingLine(next) && !isTransitionLine(next);
+};
+
+const parseFormattedScreenplayLocally = (text) => {
+  const lines = String(text || "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/\t/g, "    ").replace(/\s+$/g, ""));
+
+  const elements = [];
+  let hasSeenScene = false;
+  let inDialogue = false;
+  let firstContentAdded = false;
+
+  const nextNonBlankLine = (startIndex) => {
+    for (let index = startIndex + 1; index < lines.length; index += 1) {
+      if (lines[index].trim()) return lines[index];
+    }
+    return "";
+  };
+
+  lines.forEach((line, index) => {
+    const content = line.trim();
+    const nextLine = nextNonBlankLine(index);
+
+    if (!content) {
+      if (elements.length && elements[elements.length - 1].type !== "blank") {
+        elements.push({ type: "blank", content: "" });
+      }
+      inDialogue = false;
+      return;
+    }
+
+    if (!firstContentAdded && /^tit(?:olo|le)\s*:/i.test(content)) {
+      elements.push({ type: "title", content: content.replace(/^tit(?:olo|le)\s*:\s*/i, "").trim() || content });
+      firstContentAdded = true;
+      inDialogue = false;
+      return;
+    }
+
+    if (isSceneHeadingLine(content)) {
+      elements.push({ type: "scene_heading", content: stripInlineSceneNumber(content) });
+      hasSeenScene = true;
+      firstContentAdded = true;
+      inDialogue = false;
+      return;
+    }
+
+    if (isTransitionLine(content)) {
+      elements.push({ type: "transition", content });
+      firstContentAdded = true;
+      inDialogue = false;
+      return;
+    }
+
+    if (!hasSeenScene && !firstContentAdded && content.length <= 90) {
+      elements.push({ type: "title", content });
+      firstContentAdded = true;
+      inDialogue = false;
+      return;
+    }
+
+    if (isCharacterCueLine(content, nextLine)) {
+      elements.push({ type: "character", content });
+      firstContentAdded = true;
+      inDialogue = true;
+      return;
+    }
+
+    if (isParentheticalLine(content) && inDialogue) {
+      elements.push({ type: "parenthetical", content });
+      firstContentAdded = true;
+      return;
+    }
+
+    elements.push({ type: inDialogue ? "dialogue" : "action", content });
+    firstContentAdded = true;
+  });
+
+  while (elements[0]?.type === "blank") elements.shift();
+  while (elements[elements.length - 1]?.type === "blank") elements.pop();
+
+  return elements;
+};
+
 const parseSceneHeadingMeta = (heading) => {
   const text = String(heading || "").trim().toUpperCase();
   const internoEsterno = text.startsWith("INT./EST") || text.startsWith("INT/EST") ? "INT/EST"
@@ -2865,10 +2971,26 @@ const readPdfInputFile = async (f) => {
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     const page = await pdf.getPage(pageNumber);
     const textContent = await page.getTextContent();
-    const pageText = textContent.items
-      .map((item) => ("str" in item ? item.str : ""))
-      .join(" ")
-      .replace(/\s+/g, " ")
+    const rows = new Map();
+    textContent.items.forEach((item) => {
+      const str = "str" in item ? item.str : "";
+      if (!str.trim()) return;
+      const [, , , , x = 0, y = 0] = item.transform || [];
+      const rowKey = Math.round(y);
+      const row = rows.get(rowKey) || [];
+      row.push({ x, str });
+      rows.set(rowKey, row);
+    });
+    const pageText = [...rows.entries()]
+      .sort((a, b) => b[0] - a[0])
+      .map(([, row]) => row
+        .sort((a, b) => a.x - b.x)
+        .map((item) => item.str)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim())
+      .filter(Boolean)
+      .join("\n")
       .trim();
     if (pageText) pages.push(pageText);
   }
@@ -3121,7 +3243,13 @@ export default function App() {
 
   const handleFile = useCallback(async (f) => {
     if (!f) return;
-    setError(""); setElements(null); setAnalysis(null); setFile(f);
+    setError("");
+    setElements(null);
+    setAnalysis(null);
+    setCharacterSheets(null);
+    setBreakdown(null);
+    setLocationSheets(null);
+    setFile(f);
     try {
       const text = await readInputFile(f);
       setRawText(text);
@@ -3133,6 +3261,26 @@ export default function App() {
     const f = e.dataTransfer.files[0];
     if (f) handleFile(f);
   }, [handleFile]);
+
+  const importFormattedScreenplay = () => {
+    const text = rawText.trim();
+    if (!text) return;
+
+    const parsedElements = parseFormattedScreenplayLocally(text);
+    const sceneCount = parsedElements.filter(isRealSceneHeading).length;
+    if (!parsedElements.length || sceneCount === 0) {
+      setError("Non riconosco intestazioni scena tipo INT., EST. o EXT. nel testo. Per una bozza non formattata usa Formattazione Creativa.");
+      return;
+    }
+
+    setError("");
+    setElements(parsedElements);
+    setAnalysis(null);
+    setCharacterSheets(null);
+    setBreakdown(null);
+    setLocationSheets(null);
+    setActiveTab("preview");
+  };
 
   const runFormatter = async (mode = "creative") => {
     if (!rawText.trim()) return;
@@ -3354,6 +3502,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
 
   const busy            = loading || analyzing || loadingSheets || loadingBreakdown || loadingLocations;
   const canFormat       = rawText.trim().length > 10 && !busy;
+  const canImportDirect = rawText.trim().length > 10 && !busy;
   const canAnalyze      = !!elements && !busy;
   const canRunSheets    = !!elements && !busy;
   const canRunBreakdown = !!elements && !busy;
@@ -3389,6 +3538,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
     keyInput:   { width: "100%", background: "rgba(0,0,0,.22)", border: "1px solid rgba(255,255,255,.12)", borderRadius: "6px", color: "#ddd", fontFamily: "monospace", fontSize: "12px", padding: "10px", boxSizing: "border-box" },
     btn:        { background: "linear-gradient(135deg,#c8a96e,#b8994e)", color: "#0a0a0f", border: "none", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canFormat ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canFormat ? 1 : 0.4 },
     btnConservative: { background: canFormat ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.03)", color: canFormat ? "#e8e8f0" : "#777", border: "1px solid rgba(255,255,255,.14)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canFormat ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canFormat ? 1 : 0.45 },
+    btnDirectImport: { background: canImportDirect ? "rgba(165,214,167,.1)" : "rgba(165,214,167,.04)", color: canImportDirect ? "#b8e6ba" : "#6e8d70", border: "1px solid rgba(165,214,167,.28)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canImportDirect ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canImportDirect ? 1 : 0.5 },
     btnOrganic: { background: canFormat ? "linear-gradient(135deg,#4FC3F7,#087EA4)" : "rgba(79,195,247,.12)", color: canFormat ? "#041016" : "#4FC3F7", border: "1px solid rgba(79,195,247,.42)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canFormat ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canFormat ? 1 : 0.5 },
     btnAnalyze: { background: canAnalyze ? "linear-gradient(135deg,#7C4DFF,#651FFF)" : "rgba(124,77,255,.15)", color: canAnalyze ? "#fff" : "#7C4DFF", border: "1px solid rgba(124,77,255,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canAnalyze ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canAnalyze ? 1 : 0.5 },
     btnSheets:    { background: canRunSheets ? "linear-gradient(135deg,#00897B,#00695C)" : "rgba(0,137,123,.15)", color: canRunSheets ? "#fff" : "#00897B", border: "1px solid rgba(0,137,123,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canRunSheets ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canRunSheets ? 1 : 0.5 },
@@ -3586,6 +3736,12 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
 
           {/* Pulsanti Formatta */}
           <div ref={formatButtonRef} style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <button style={s.btnDirectImport} disabled={!canImportDirect} onClick={importFormattedScreenplay}>
+              Carica già formattata senza AI
+            </button>
+            <div style={{ color: "#777", fontFamily: "sans-serif", fontSize: "11px", lineHeight: "1.5", marginTop: "-2px" }}>
+              Usa questo se la sceneggiatura ha gia intestazioni INT./EST., personaggi e dialoghi. Dopo puoi avviare analisi, schede e breakdown.
+            </div>
             <button style={s.btnConservative} disabled={!canFormat} onClick={() => runFormatter("conservative")}>
               {loading ? "Parsing in corso..." : "Parsing Conservativo"}
             </button>

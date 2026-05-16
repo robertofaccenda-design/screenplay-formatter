@@ -24,6 +24,7 @@ Moduli previsti:
 
 - Importa testi `.txt`, `.docx` e PDF con testo selezionabile
 - Accetta anche testo incollato direttamente nella textarea
+- Permette di caricare una sceneggiatura gia formattata senza passare dalla formattazione AI
 - Integra il modulo **Crea la tua storia** raggiungibile dalla home e dalla rotta `/crea-la-tua-storia/`
 - Permette di creare una storia guidata, esportarla in PDF/TXT e caricarla direttamente nella formattazione creativa di DeepFrame
 - Riconosce gli elementi principali di una sceneggiatura:
@@ -50,6 +51,18 @@ Moduli previsti:
 - Permette di scegliere tra AI Anthropic su Cloudflare e modello locale via LM Studio
 
 ## Aggiornamenti Recenti
+
+### Supporto PDF In Input
+
+DeepFrame Script ora accetta anche file `.pdf` nel caricamento iniziale per il parsing e la formattazione.
+
+Dettagli operativi:
+
+- il PDF viene letto nel browser prima dell'invio all'AI;
+- l'estrazione testo usa PDF.js caricato on demand;
+- sono supportati PDF con testo selezionabile;
+- i PDF scansionati o fotografici richiedono prima un passaggio OCR;
+- dopo l'estrazione, il testo segue lo stesso workflow di TXT/DOCX: Parsing Conservativo, Formattazione Creativa e Intervento creativo.
 
 ### Crea La Tua Storia
 
@@ -79,6 +92,27 @@ Correzioni importanti:
 - con LM Studio i testi lunghi vengono divisi in blocchi per ridurre rifiuti o errori di contesto;
 - la riparazione JSON gestisce anche array malformati prodotti da modelli locali;
 - il conteggio scene riconosce come scene solo intestazioni reali `INT`, `EST`, `INT/EST`, `EXT`, evitando di numerare titoli o atti.
+
+### Caricamento Senza AI
+
+Per sceneggiature gia formattate e disponibile il pulsante **Carica gia formattata senza AI**.
+
+Questo flusso:
+
+- non chiama Anthropic;
+- non chiama LM Studio;
+- non riscrive il testo;
+- non aggiunge scene, dialoghi o azioni;
+- usa solo una classificazione locale deterministica per riconoscere intestazioni scena, azioni, personaggi, dialoghi, parentetiche e transizioni;
+- abilita subito anteprima, struttura, export, analisi drammaturgica, schede personaggio, schede location e breakdown reparti.
+
+Funziona meglio quando il testo contiene intestazioni scena esplicite come:
+
+```text
+INT. CASA - NOTTE
+EST. STRADA - GIORNO
+EXT. PARKING LOT - NIGHT
+```
 
 ### Breakdown Reparti
 
