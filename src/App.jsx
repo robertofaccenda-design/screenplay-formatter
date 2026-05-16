@@ -651,6 +651,9 @@ const SCENE_HEADING_RE = /^(?:\d+[A-Z]?[\s.]*)?(?:INT|EST|INT\/EST|INT\.\/EST|IN
 const TRANSITION_RE = /^(?:FADE IN|FADE OUT|CUT TO|TAGLIO A|DISSOLVENZA(?:\s+A|\s+IN|\s+OUT)?|FONDUTA(?:\s+AL\s+NERO)?|SMASH CUT TO|MATCH CUT TO|JUMP CUT TO|STACCO A)\s*:?\s*$/i;
 const CHARACTER_SUFFIX_RE = /\s+\((?:V\.O\.|O\.S\.|O\.C\.|F\.C\.|CONT'D|CONTINUED|FUORI CAMPO|VOCE OFF)\)$/i;
 const MAX_LOCAL_ANALYSIS_CHARS = 14000;
+const LOCAL_LM_STUDIO_TIMEOUT_MS = 90000;
+const LOCAL_ANALYSIS_TIMEOUT_MS = 35000;
+const LOCAL_ANALYSIS_TOTAL_BUDGET_MS = 120000;
 
 const stripInlineSceneNumber = (line) => (
   line.replace(/^\s*\d+[A-Z]?[\s.]*((?:INT|EST|INT\/EST|INT\.\/EST|INT-EST|I\/E|EXT)\.?(?:\s+|$).*?)(?:\s+\d+[A-Z]?)?\s*$/i, "$1").trim()
@@ -3402,7 +3405,7 @@ export default function App() {
 
   const isLocalAi = aiProvider === "lmstudio";
 
-  const runLocalLmStudio = async ({ system, user, temperature = 0.1, output = "object" }) => {
+  const runLocalLmStudio = async ({ system, user, temperature = 0.1, output = "object", timeoutMs = LOCAL_LM_STUDIO_TIMEOUT_MS }) => {
     const endpoint = lmStudioEndpoint.trim() || DEFAULT_LM_STUDIO_ENDPOINT;
     const model = lmStudioModel.trim() || DEFAULT_LM_STUDIO_MODEL;
     const buildBody = (messages, temp = temperature, useJsonMode = true) => ({
@@ -3413,13 +3416,25 @@ export default function App() {
       ...(useJsonMode && output === "object" ? { response_format: { type: "json_object" } } : {}),
     });
     const sendRequest = async (messages, temp = temperature, useJsonMode = true) => {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildBody(messages, temp, useJsonMode)),
-      });
-      const payload = await res.json().catch(() => ({}));
-      return { res, payload };
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildBody(messages, temp, useJsonMode)),
+          signal: controller.signal,
+        });
+        const payload = await res.json().catch(() => ({}));
+        return { res, payload };
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          throw new Error(`LM Studio ha impiegato più di ${Math.round(timeoutMs / 1000)} secondi per rispondere.`);
+        }
+        throw error;
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
     };
     let response;
     let data;
@@ -3434,7 +3449,8 @@ export default function App() {
           { role: "user", content: user },
         ], temperature, false));
       }
-    } catch {
+    } catch (error) {
+      if (error?.message?.includes("LM Studio ha impiegato")) throw error;
       throw new Error(
         "Non riesco a raggiungere LM Studio. Avvia il server locale OpenAI-compatible, controlla la porta 1234 e, se usi il sito pubblicato, abilita CORS in LM Studio."
       );
@@ -3575,20 +3591,30 @@ export default function App() {
 
   const runAnalysis = async () => {
     if (!elements) return;
-    setAnalyzing(true); setError("");
+    setAnalyzing(true); setError(""); setLoadingMsg("Analisi drammaturgica in corso...");
     try {
       const analysisElements = isLocalAi ? compactElementsForAnalysis(elements) : elements;
       const localChunks = isLocalAi ? splitElementsForLocalAnalysis(analysisElements) : [];
 
       if (isLocalAi && localChunks.length > 1) {
         const partials = [];
+        const startedAt = Date.now();
         for (let index = 0; index < localChunks.length; index += 1) {
           const chunk = localChunks[index];
+          setLoadingMsg(`Analisi LM Studio: blocco ${index + 1}/${localChunks.length}...`);
+          if (Date.now() - startedAt > LOCAL_ANALYSIS_TOTAL_BUDGET_MS) {
+            partials.push({
+              sceneOffset: chunk.sceneOffset,
+              analysis: buildFallbackAnalysis(chunk.elements, `Budget massimo di ${Math.round(LOCAL_ANALYSIS_TOTAL_BUDGET_MS / 1000)} secondi raggiunto: blocco ${index + 1}/${localChunks.length} gestito localmente.`),
+            });
+            continue;
+          }
           try {
             const data = await postAiJson(API_ANALYZE, { elements: chunk.elements }, {
               system: LOCAL_ANALYSIS_PROMPTS.analyze,
               user: `Analizza questo blocco ${index + 1}/${localChunks.length} di una sceneggiatura lunga in formato JSON. Il risultato deve popolare la dashboard per le sole scene presenti in questo blocco. Non lasciare vuoti struttura.atti, analisi_scene, personaggi o valutazione_globale se nel testo ci sono dati disponibili:\n\n${JSON.stringify(chunk.elements)}`,
               temperature: 0.2,
+              timeoutMs: LOCAL_ANALYSIS_TIMEOUT_MS,
             });
             partials.push({
               sceneOffset: chunk.sceneOffset,
@@ -3612,6 +3638,7 @@ export default function App() {
         system: LOCAL_ANALYSIS_PROMPTS.analyze,
         user: `Analizza questa sceneggiatura in formato JSON. Il risultato deve popolare la dashboard, quindi non lasciare vuoti struttura.atti, analisi_scene, personaggi o valutazione_globale se nel testo ci sono dati disponibili:\n\n${JSON.stringify(analysisElements)}`,
         temperature: 0.2,
+        timeoutMs: isLocalAi ? LOCAL_ANALYSIS_TIMEOUT_MS : undefined,
       });
       setAnalysis(isLocalAi ? unwrapLocalPayload(data, ["analysis", "analisi"]) : data.analysis);
       setActiveTab("analisi");
@@ -3626,7 +3653,7 @@ export default function App() {
       }
       setError("Errore analisi: " + e.message);
     } finally {
-      setAnalyzing(false);
+      setAnalyzing(false); setLoadingMsg("");
     }
   };
 
@@ -4211,7 +4238,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
             {analyzing && (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "16px" }}>
                 <div style={{ width: "40px", height: "40px", border: "3px solid rgba(124,77,255,.2)", borderTop: "3px solid #7C4DFF", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-                <div style={{ fontFamily: "sans-serif", color: "#b39dff", fontSize: "14px" }}>Analisi drammaturgica in corso...</div>
+                <div style={{ fontFamily: "sans-serif", color: "#b39dff", fontSize: "14px" }}>{loadingMsg || "Analisi drammaturgica in corso..."}</div>
                 <div style={{ fontFamily: "monospace", color: "#555", fontSize: "11px" }}>Struttura in 3 atti · Archi personaggi · Segnalazioni</div>
               </div>
             )}
