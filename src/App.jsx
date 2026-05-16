@@ -650,6 +650,7 @@ const isRealSceneHeading = (element) => (
 const SCENE_HEADING_RE = /^(?:\d+[A-Z]?[\s.]*)?(?:INT|EST|INT\/EST|INT\.\/EST|INT-EST|I\/E|EXT)\.?(?:\s+|$)/i;
 const TRANSITION_RE = /^(?:FADE IN|FADE OUT|CUT TO|TAGLIO A|DISSOLVENZA(?:\s+A|\s+IN|\s+OUT)?|FONDUTA(?:\s+AL\s+NERO)?|SMASH CUT TO|MATCH CUT TO|JUMP CUT TO|STACCO A)\s*:?\s*$/i;
 const CHARACTER_SUFFIX_RE = /\s+\((?:V\.O\.|O\.S\.|O\.C\.|F\.C\.|CONT'D|CONTINUED|FUORI CAMPO|VOCE OFF)\)$/i;
+const MAX_LOCAL_ANALYSIS_CHARS = 14000;
 
 const stripInlineSceneNumber = (line) => (
   line.replace(/^\s*\d+[A-Z]?[\s.]*((?:INT|EST|INT\/EST|INT\.\/EST|INT-EST|I\/E|EXT)\.?(?:\s+|$).*?)(?:\s+\d+[A-Z]?)?\s*$/i, "$1").trim()
@@ -751,6 +752,172 @@ const parseFormattedScreenplayLocally = (text) => {
   while (elements[elements.length - 1]?.type === "blank") elements.pop();
 
   return elements;
+};
+
+const compactElementsForAnalysis = (elements = []) => (
+  elements
+    .filter((element) => element?.type !== "blank")
+    .map((element) => ({
+      type: element.type,
+      content: String(element.content || "").trim(),
+    }))
+    .filter((element) => element.type && element.content)
+);
+
+const splitElementsForLocalAnalysis = (elements = [], maxChars = MAX_LOCAL_ANALYSIS_CHARS) => {
+  const chunks = [];
+  let current = [];
+  let currentChars = 0;
+  let sceneOffset = 0;
+  let currentSceneOffset = 0;
+
+  const flush = () => {
+    if (!current.length) return;
+    chunks.push({ elements: current, sceneOffset: currentSceneOffset });
+    current = [];
+    currentChars = 0;
+    currentSceneOffset = sceneOffset;
+  };
+
+  elements.forEach((element) => {
+    const serializedLength = JSON.stringify(element).length + 1;
+    const startsScene = isRealSceneHeading(element);
+    if (current.length && (currentChars + serializedLength > maxChars) && startsScene) {
+      flush();
+    } else if (current.length && currentChars + serializedLength > maxChars) {
+      flush();
+    }
+
+    current.push(element);
+    currentChars += serializedLength;
+    if (startsScene) sceneOffset += 1;
+  });
+
+  flush();
+  return chunks;
+};
+
+const clampScore = (score) => {
+  const number = Number(score);
+  if (!Number.isFinite(number)) return 6;
+  return Math.min(10, Math.max(1, Math.round(number)));
+};
+
+const averageScores = (partials, key) => {
+  const scores = partials
+    .map((item) => Number(item?.analysis?.valutazione_globale?.[key]))
+    .filter(Number.isFinite);
+  if (!scores.length) return 6;
+  return clampScore(scores.reduce((sum, score) => sum + score, 0) / scores.length);
+};
+
+const buildMergedStructure = (totalScenes) => {
+  const safeTotal = Math.max(0, totalScenes);
+  const rangeForAct = (act) => {
+    if (!safeTotal) return { scene_da: 0, scene_a: 0 };
+    const start = Math.floor((safeTotal * (act - 1)) / 3) + 1;
+    const end = act === 3 ? safeTotal : Math.max(start, Math.floor((safeTotal * act) / 3));
+    return { scene_da: start, scene_a: end };
+  };
+
+  return {
+    totale_scene: safeTotal,
+    atti: [1, 2, 3].map((atto) => ({
+      atto,
+      ...rangeForAct(atto),
+      percentuale: atto === 1 ? "33%" : atto === 2 ? "34%" : "33%",
+      funzione_narrativa: atto === 1 ? "impostazione" : atto === 2 ? "sviluppo e complicazioni" : "climax e risoluzione",
+      valutazione: "efficace",
+      note_docente: "Sintesi generata da analisi a blocchi per compatibilita con LM Studio.",
+    })),
+    momenti_chiave: [
+      { tipo: "inciting_incident", scena_numero: safeTotal ? Math.max(1, Math.round(safeTotal * 0.12)) : null, descrizione: "", valutazione: "debole", nota_docente: "Individuare nel dettaglio nella lettura delle scene." },
+      { tipo: "primo_punto_di_svolta", scena_numero: safeTotal ? Math.max(1, Math.round(safeTotal * 0.25)) : null, descrizione: "", valutazione: "debole", nota_docente: "Stima posizionale da affinare." },
+      { tipo: "midpoint", scena_numero: safeTotal ? Math.max(1, Math.round(safeTotal * 0.5)) : null, descrizione: "", valutazione: "debole", nota_docente: "Stima posizionale da affinare." },
+      { tipo: "secondo_punto_di_svolta", scena_numero: safeTotal ? Math.max(1, Math.round(safeTotal * 0.75)) : null, descrizione: "", valutazione: "debole", nota_docente: "Stima posizionale da affinare." },
+      { tipo: "climax", scena_numero: safeTotal || null, descrizione: "", valutazione: "debole", nota_docente: "Stima posizionale da affinare." },
+    ],
+  };
+};
+
+const mergeLocalAnalysisChunks = (partials, sourceElements = []) => {
+  const sceneHeadings = sourceElements.filter(isRealSceneHeading).map((element) => element.content);
+  const mergedScenes = [];
+  const mergedSignals = [];
+  const characterMap = new Map();
+
+  partials.forEach(({ analysis, sceneOffset }) => {
+    const scenes = Array.isArray(analysis?.analisi_scene) ? analysis.analisi_scene : [];
+    scenes.forEach((scene, index) => {
+      const localNumber = Number(scene?.numero) || index + 1;
+      const globalNumber = sceneOffset + localNumber;
+      mergedScenes.push({
+        ...scene,
+        numero: globalNumber,
+        titolo: scene?.titolo || sceneHeadings[globalNumber - 1] || `Scena ${globalNumber}`,
+      });
+    });
+
+    const signals = Array.isArray(analysis?.segnalazioni) ? analysis.segnalazioni : [];
+    signals.forEach((signal) => {
+      const localSceneNumber = Number(signal?.scena_numero);
+      mergedSignals.push({
+        ...signal,
+        scena_numero: Number.isFinite(localSceneNumber) ? sceneOffset + localSceneNumber : signal?.scena_numero ?? null,
+      });
+    });
+
+    const characters = Array.isArray(analysis?.personaggi) ? analysis.personaggi : [];
+    characters.forEach((character) => {
+      const name = String(character?.nome || "").trim().toUpperCase();
+      if (!name) return;
+      const existing = characterMap.get(name) || {
+        nome: name,
+        battute: 0,
+        arco: "assente",
+        analisi_arco: "",
+        tipi_conflitto: [],
+        presenza_scene: 0,
+        nota_docente: "",
+      };
+      existing.battute += Number(character?.battute) || 0;
+      existing.presenza_scene += Number(character?.presenza_scene) || 0;
+      if (existing.arco === "assente" && character?.arco) existing.arco = character.arco;
+      if (!existing.analisi_arco && character?.analisi_arco) existing.analisi_arco = character.analisi_arco;
+      existing.tipi_conflitto = [...new Set([
+        ...existing.tipi_conflitto,
+        ...(Array.isArray(character?.tipi_conflitto) ? character.tipi_conflitto : []),
+      ])];
+      if (!existing.nota_docente && character?.nota_docente) existing.nota_docente = character.nota_docente;
+      characterMap.set(name, existing);
+    });
+  });
+
+  return {
+    struttura: buildMergedStructure(sceneHeadings.length),
+    personaggi: [...characterMap.values()],
+    analisi_scene: mergedScenes
+      .sort((a, b) => Number(a.numero) - Number(b.numero))
+      .map((scene, index) => ({
+        ...scene,
+        numero: index + 1,
+        titolo: scene.titolo || sceneHeadings[index] || `Scena ${index + 1}`,
+      })),
+    segnalazioni: mergedSignals.slice(0, 60),
+    valutazione_globale: {
+      punteggio_struttura: averageScores(partials, "punteggio_struttura"),
+      punteggio_personaggi: averageScores(partials, "punteggio_personaggi"),
+      punteggio_dialoghi: averageScores(partials, "punteggio_dialoghi"),
+      punteggio_ritmo: averageScores(partials, "punteggio_ritmo"),
+      punti_di_forza: [...new Set(partials.flatMap((item) => (
+        Array.isArray(item?.analysis?.valutazione_globale?.punti_di_forza) ? item.analysis.valutazione_globale.punti_di_forza : []
+      )))].slice(0, 8),
+      aree_di_miglioramento: [...new Set(partials.flatMap((item) => (
+        Array.isArray(item?.analysis?.valutazione_globale?.aree_di_miglioramento) ? item.analysis.valutazione_globale.aree_di_miglioramento : []
+      )))].slice(0, 8),
+      commento_docente: "Analisi ricomposta da piu blocchi per evitare il limite di contesto del modello locale LM Studio.",
+    },
+  };
 };
 
 const parseSceneHeadingMeta = (heading) => {
@@ -3334,9 +3501,32 @@ export default function App() {
     if (!elements) return;
     setAnalyzing(true); setError("");
     try {
-      const data = await postAiJson(API_ANALYZE, { elements }, {
+      const analysisElements = isLocalAi ? compactElementsForAnalysis(elements) : elements;
+      const localChunks = isLocalAi ? splitElementsForLocalAnalysis(analysisElements) : [];
+
+      if (isLocalAi && localChunks.length > 1) {
+        const partials = [];
+        for (let index = 0; index < localChunks.length; index += 1) {
+          const chunk = localChunks[index];
+          const data = await postAiJson(API_ANALYZE, { elements: chunk.elements }, {
+            system: LOCAL_ANALYSIS_PROMPTS.analyze,
+            user: `Analizza questo blocco ${index + 1}/${localChunks.length} di una sceneggiatura lunga in formato JSON. Il risultato deve popolare la dashboard per le sole scene presenti in questo blocco. Non lasciare vuoti struttura.atti, analisi_scene, personaggi o valutazione_globale se nel testo ci sono dati disponibili:\n\n${JSON.stringify(chunk.elements)}`,
+            temperature: 0.2,
+          });
+          partials.push({
+            sceneOffset: chunk.sceneOffset,
+            analysis: unwrapLocalPayload(data, ["analysis", "analisi"]) || data,
+          });
+        }
+        setAnalysis(mergeLocalAnalysisChunks(partials, elements));
+        setActiveTab("analisi");
+        setAnalyTab("struttura");
+        return;
+      }
+
+      const data = await postAiJson(API_ANALYZE, { elements: analysisElements }, {
         system: LOCAL_ANALYSIS_PROMPTS.analyze,
-        user: `Analizza questa sceneggiatura in formato JSON. Il risultato deve popolare la dashboard, quindi non lasciare vuoti struttura.atti, analisi_scene, personaggi o valutazione_globale se nel testo ci sono dati disponibili:\n\n${JSON.stringify(elements)}`,
+        user: `Analizza questa sceneggiatura in formato JSON. Il risultato deve popolare la dashboard, quindi non lasciare vuoti struttura.atti, analisi_scene, personaggi o valutazione_globale se nel testo ci sono dati disponibili:\n\n${JSON.stringify(analysisElements)}`,
         temperature: 0.2,
       });
       setAnalysis(isLocalAi ? unwrapLocalPayload(data, ["analysis", "analisi"]) : data.analysis);
