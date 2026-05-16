@@ -919,6 +919,99 @@ const buildFallbackAnalysis = (elements = [], note = "Analisi locale generata se
   };
 };
 
+const buildFallbackCharacterSheets = (elements = [], note = "Schede generate localmente perché LM Studio non ha risposto in tempo utile.") => {
+  const characterMap = new Map();
+  let sceneNumber = 0;
+  let currentCharacter = "";
+
+  elements.forEach((element) => {
+    if (isRealSceneHeading(element)) {
+      sceneNumber += 1;
+      currentCharacter = "";
+      return;
+    }
+
+    if (element?.type === "character") {
+      currentCharacter = String(element.content || "").trim().toUpperCase();
+      if (!currentCharacter) return;
+      const stats = characterMap.get(currentCharacter) || {
+        nome: currentCharacter,
+        scene: new Set(),
+        battute: [],
+      };
+      if (sceneNumber) stats.scene.add(sceneNumber);
+      characterMap.set(currentCharacter, stats);
+      return;
+    }
+
+    if (element?.type === "dialogue" && currentCharacter) {
+      const stats = characterMap.get(currentCharacter);
+      if (stats) stats.battute.push(String(element.content || "").trim());
+    }
+  });
+
+  const totalDialogues = [...characterMap.values()].reduce((sum, item) => sum + item.battute.length, 0) || 1;
+  const personaggi = [...characterMap.values()]
+    .sort((a, b) => b.battute.length - a.battute.length)
+    .map((item, index) => {
+      const sceneNumbers = [...item.scene].sort((a, b) => a - b);
+      const role = index === 0 ? "protagonista" : index === 1 ? "deuteragonista" : "personaggio_secondario";
+      const quote = item.battute.find((line) => line.length > 12) || item.battute[0] || "non_specificato";
+      return {
+        nome: item.nome,
+        ruolo: role,
+        genere_presunto: "non_specificato",
+        presenza: {
+          scene_totali: sceneNumbers.length,
+          prima_scena: sceneNumbers[0] || null,
+          ultima_scena: sceneNumbers[sceneNumbers.length - 1] || null,
+          scene_numeri: sceneNumbers,
+          battute_totali: item.battute.length,
+          percentuale_dialogo: `${Math.round((item.battute.length / totalDialogues) * 100)}%`,
+        },
+        profilo_narrativo: {
+          descrizione_in_una_riga: `${item.nome} compare in ${sceneNumbers.length || 0} scene e ha ${item.battute.length} battute rilevate.`,
+          motivazione_principale: "non_specificato",
+          bisogno_profondo: "non_specificato",
+          paura_principale: "non_specificato",
+          difetto_principale: "non_specificato",
+          pregio_principale: "non_specificato",
+          arco_narrativo: "Da approfondire con analisi AI o revisione manuale.",
+          citazione_rappresentativa: quote,
+        },
+        relazioni: [],
+        conflitti: {
+          interno: "non_specificato",
+          interpersonale: "non_specificato",
+          sociale_o_ambientale: "non_specificato",
+        },
+        scheda_produzione: {
+          caratteristiche_fisiche_deducibili: "non_specificato",
+          costumi_accessori: "non_specificato",
+          note_casting: "Da definire in casting.",
+          complessità_interpretativa: item.battute.length > 20 ? "alta" : item.battute.length > 6 ? "media" : "bassa",
+          presenza_scena_difficile: false,
+          note_regia: "Scheda locale generata dai cue personaggio e dai dialoghi riconosciuti.",
+        },
+        scheda_didattica: {
+          funzione_drammaturgica: "Da verificare nella lettura complessiva della sceneggiatura.",
+          archetipo: "non_specificato",
+          domande_per_l_autore: [
+            `Quale desiderio guida ${item.nome}?`,
+            `Come cambia ${item.nome} tra prima e ultima apparizione?`,
+          ],
+          nota_docente: note,
+        },
+      };
+    });
+
+  return {
+    personaggi,
+    mappa_relazioni: [],
+    note_ensemble: note,
+  };
+};
+
 const mergeLocalAnalysisChunks = (partials, sourceElements = []) => {
   const sceneHeadings = sourceElements.filter(isRealSceneHeading).map((element) => element.content);
   const mergedScenes = [];
@@ -3659,19 +3752,27 @@ export default function App() {
 
   const runCharacterSheets = async () => {
     if (!elements) return;
-    setLoadingSheets(true); setError("");
+    setLoadingSheets(true); setError(""); setLoadingMsg("Generazione schede personaggio...");
     try {
-      const data = await postAiJson(API_CHARACTER_SHEETS, { elements }, {
+      const sheetElements = isLocalAi ? compactElementsForAnalysis(elements) : elements;
+      const data = await postAiJson(API_CHARACTER_SHEETS, { elements: sheetElements }, {
         system: LOCAL_ANALYSIS_PROMPTS.characterSheets,
-        user: `Genera le schede personaggio complete per questa sceneggiatura:\n\n${JSON.stringify(elements)}`,
+        user: `Genera le schede personaggio complete per questa sceneggiatura:\n\n${JSON.stringify(sheetElements)}`,
         temperature: 0.2,
+        timeoutMs: isLocalAi ? 45000 : undefined,
       });
       setCharacterSheets(isLocalAi ? unwrapLocalPayload(data, ["characterSheets", "character_sheets", "schede_personaggio", "schedePersonaggio"]) : data.characterSheets);
       setActiveTab("schede");
     } catch (e) {
+      if (isLocalAi) {
+        console.warn("Schede personaggio LM Studio non disponibili, uso fallback locale:", e);
+        setCharacterSheets(buildFallbackCharacterSheets(elements, `LM Studio non ha generato schede personaggio entro il tempo utile: ${e.message}`));
+        setActiveTab("schede");
+        return;
+      }
       setError("Errore schede: " + e.message);
     } finally {
-      setLoadingSheets(false);
+      setLoadingSheets(false); setLoadingMsg("");
     }
   };
 
@@ -4229,7 +4330,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
             {loadingSheets && (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "16px" }}>
                 <div style={{ width: "40px", height: "40px", border: "3px solid rgba(0,137,123,.2)", borderTop: "3px solid #00897B", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-                <div style={{ fontFamily: "sans-serif", color: "#80CBC4", fontSize: "14px" }}>Generazione schede personaggio...</div>
+                <div style={{ fontFamily: "sans-serif", color: "#80CBC4", fontSize: "14px" }}>{loadingMsg || "Generazione schede personaggio..."}</div>
                 <div style={{ fontFamily: "monospace", color: "#555", fontSize: "11px" }}>Profilo · Relazioni · Produzione · Didattica</div>
               </div>
             )}
