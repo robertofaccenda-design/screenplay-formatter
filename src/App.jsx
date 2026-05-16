@@ -2853,6 +2853,10 @@ function BreakdownPanelContent({ data, initialWorkPlan }) {
     };
   };
 
+  const compactWorkPlan = (days) => asArray(days)
+    .filter((day) => sceneNumbersFromDay(day).length > 0)
+    .map((day, dayIndex) => ({ ...day, giorno: dayIndex + 1 }));
+
   const getWorkDayComplexity = (day) => (
     day.complessità_massima || strongestComplexity(sceneNumbersFromDay(day).map((number) => sceneByNumber.get(number)).filter(Boolean))
   );
@@ -2941,7 +2945,7 @@ function BreakdownPanelContent({ data, initialWorkPlan }) {
 
     setWorkPlan((current) => {
       const basePlan = current.length ? current : buildWorkPlanFromScenes(per_scena, "complexity");
-      return basePlan.map((day) => {
+      const nextPlan = basePlan.map((day) => {
         const numbers = sceneNumbersFromDay(day).filter((item) => item !== number);
         const nextNumbers = Number(day.giorno) === target ? uniq([...numbers, number]) : numbers;
         const motivazione = Number(day.giorno) === target
@@ -2949,19 +2953,20 @@ function BreakdownPanelContent({ data, initialWorkPlan }) {
           : day.motivazione;
         return updateWorkDayMetrics(day, { scene_consigliate: nextNumbers, motivazione, criterio: Number(day.giorno) === target ? "manuale" : day.criterio });
       });
+      return compactWorkPlan(nextPlan);
     });
   };
 
   const removeSceneFromDay = (dayIndex, sceneNumber) => {
     const number = Number(sceneNumber);
-    setWorkPlan((current) => current.map((day, index) => {
+    setWorkPlan((current) => compactWorkPlan(current.map((day, index) => {
       if (index !== dayIndex) return day;
       return updateWorkDayMetrics(day, {
         scene_consigliate: sceneNumbersFromDay(day).filter((item) => item !== number),
         motivazione: "Giornata modificata manualmente. La stima tiene conto della complessità delle scene rimaste.",
         criterio: "manuale",
       });
-    }));
+    })));
   };
 
   const tabBtn = (id, label, count) => (
