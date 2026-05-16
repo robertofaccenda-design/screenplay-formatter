@@ -470,7 +470,8 @@ const extractLmStudioContent = (data) => (
   data.choices?.[0]?.message?.content || data.choices?.[0]?.text || ""
 );
 
-const LOCAL_FORMAT_CHUNK_LIMIT = 5500;
+const LOCAL_FORMAT_CHUNK_LIMIT = 2800;
+const LOCAL_FORMAT_MIN_RETRY_CHARS = 900;
 
 const splitTextForLocalFormatting = (text, limit = LOCAL_FORMAT_CHUNK_LIMIT) => {
   const normalized = String(text || "").trim();
@@ -508,6 +509,31 @@ const splitTextForLocalFormatting = (text, limit = LOCAL_FORMAT_CHUNK_LIMIT) => 
 
   pushCurrent();
   return chunks;
+};
+
+const splitTextAtNearestBoundary = (text) => {
+  const value = String(text || "").trim();
+  const midpoint = Math.floor(value.length / 2);
+  const boundaryPatterns = [/\n{2,}/g, /\n/g, /[.!?]\s+/g];
+  let bestIndex = -1;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  boundaryPatterns.forEach((pattern) => {
+    [...value.matchAll(pattern)].forEach((match) => {
+      const index = match.index + match[0].length;
+      const distance = Math.abs(index - midpoint);
+      if (index > 0 && index < value.length && distance < bestDistance) {
+        bestIndex = index;
+        bestDistance = distance;
+      }
+    });
+  });
+
+  const splitIndex = bestIndex > 0 ? bestIndex : midpoint;
+  return [
+    value.slice(0, splitIndex).trim(),
+    value.slice(splitIndex).trim(),
+  ].filter(Boolean);
 };
 
 const normalizeElementsPayload = (data, isLocal) => {
@@ -3699,10 +3725,28 @@ export default function App() {
         return normalizeElementsPayload(data, isLocalAi);
       };
 
+      const formatChunkAdaptive = async (text, index = 0, total = 1, depth = 0) => {
+        try {
+          return await formatChunk(text, index, total);
+        } catch (error) {
+          if (!isLocalAi || text.length <= LOCAL_FORMAT_MIN_RETRY_CHARS || depth >= 3) {
+            throw error;
+          }
+          const parts = splitTextAtNearestBoundary(text);
+          if (parts.length < 2) throw error;
+          setLoadingMsg(`${modeLabel} con LM Studio: riduco il blocco ${index + 1}/${total}...`);
+          const results = [];
+          for (let partIndex = 0; partIndex < parts.length; partIndex += 1) {
+            results.push(...await formatChunkAdaptive(parts[partIndex], partIndex, parts.length, depth + 1));
+          }
+          return results;
+        }
+      };
+
       const chunks = isLocalAi ? splitTextForLocalFormatting(rawText) : [rawText];
       const formattedChunks = [];
       for (let index = 0; index < chunks.length; index += 1) {
-        formattedChunks.push(...await formatChunk(chunks[index], index, chunks.length));
+        formattedChunks.push(...await formatChunkAdaptive(chunks[index], index, chunks.length));
       }
 
       if (!formattedChunks.length) {
