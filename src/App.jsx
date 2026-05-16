@@ -3813,6 +3813,11 @@ export default function App() {
 
   const runAnalysis = async () => {
     if (!elements) return;
+    if (analysis) {
+      setActiveTab("analisi");
+      setAnalyTab("struttura");
+      return;
+    }
     setAnalyzing(true); setError(""); setLoadingMsg("Analisi drammaturgica in corso...");
     try {
       const analysisElements = isLocalAi ? compactElementsForAnalysis(elements) : elements;
@@ -3881,6 +3886,10 @@ export default function App() {
 
   const runCharacterSheets = async () => {
     if (!elements) return;
+    if (characterSheets) {
+      setActiveTab("schede");
+      return;
+    }
     setLoadingSheets(true); setError(""); setLoadingMsg("Generazione schede personaggio...");
     try {
       const sheetElements = isLocalAi ? compactElementsForAnalysis(elements) : elements;
@@ -3907,6 +3916,10 @@ export default function App() {
 
   const runLocationSheets = async () => {
     if (!elements) return;
+    if (locationSheets) {
+      setActiveTab("locations");
+      return;
+    }
     setLoadingLocations(true); setError("");
     try {
       const data = await postAiJson(API_LOCATION_SHEETS, { elements }, {
@@ -3925,6 +3938,10 @@ export default function App() {
 
   const runBreakdown = async () => {
     if (!elements) return;
+    if (breakdown) {
+      setActiveTab("breakdown");
+      return;
+    }
     setLoadingBreakdown(true); setError("");
     try {
       const data = await postAiJson(API_BREAKDOWN, { elements }, {
@@ -4331,22 +4348,22 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
           {/* Pulsanti AI — appaiono solo dopo la formattazione */}
           {elements && (
             <button style={s.btnAnalyze} disabled={!canAnalyze} onClick={runAnalysis}>
-              {analyzing ? "Analisi in corso..." : "Analisi Drammaturgica"}
+              {analyzing ? "Analisi in corso..." : analysis ? "Apri Analisi Drammaturgica" : "Analisi Drammaturgica"}
             </button>
           )}
           {elements && (
             <button style={s.btnSheets} disabled={!canRunSheets} onClick={runCharacterSheets}>
-              {loadingSheets ? "Generazione schede..." : "Schede Personaggio"}
+              {loadingSheets ? "Generazione schede..." : characterSheets ? "Apri Schede Personaggio" : "Schede Personaggio"}
             </button>
           )}
           {elements && (
             <button style={s.btnBreakdown} disabled={!canRunBreakdown} onClick={runBreakdown}>
-              {loadingBreakdown ? "Breakdown in corso..." : "Breakdown Reparti"}
+              {loadingBreakdown ? "Breakdown in corso..." : breakdown ? "Apri Breakdown Reparti" : "Breakdown Reparti"}
             </button>
           )}
           {elements && (
             <button style={s.btnLocations} disabled={busy} onClick={runLocationSheets}>
-              {loadingLocations ? "Schede location..." : "Schede Location"}
+              {loadingLocations ? "Schede location..." : locationSheets ? "Apri Schede Location" : "Schede Location"}
             </button>
           )}
 
