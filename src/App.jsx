@@ -1038,6 +1038,50 @@ const buildFallbackCharacterSheets = (elements = [], note = "Schede generate loc
   };
 };
 
+const normalizeMergedAnalysisSignals = (signals = []) => {
+  const normalized = [];
+  let fallbackCount = 0;
+  let fallbackReason = "";
+  const seen = new Set();
+
+  signals.forEach((signal) => {
+    const isFallbackSignal = String(signal?.elemento || "").includes("LM Studio")
+      || String(signal?.spiegazione || "").includes("LM Studio");
+
+    if (isFallbackSignal) {
+      fallbackCount += 1;
+      if (!fallbackReason && signal?.spiegazione) fallbackReason = signal.spiegazione;
+      return;
+    }
+
+    const key = [
+      signal?.tipo || "",
+      signal?.gravita || "",
+      signal?.scena_numero || "",
+      signal?.elemento || "",
+      signal?.spiegazione || "",
+    ].join("|");
+    if (seen.has(key)) return;
+    seen.add(key);
+    normalized.push(signal);
+  });
+
+  if (fallbackCount > 0) {
+    normalized.unshift({
+      tipo: "limite_modello_locale",
+      gravita: "bassa",
+      scena_numero: null,
+      elemento: "LM Studio fallback",
+      spiegazione: fallbackCount === 1
+        ? fallbackReason || "Una parte dell'analisi è stata generata localmente perché LM Studio non ha restituito JSON valido."
+        : `${fallbackCount} blocchi dell'analisi sono stati gestiti con fallback locale perché LM Studio non ha restituito JSON valido o ha superato il timeout.`,
+      suggerimento: "Per un'analisi più precisa prova un modello locale più stabile sul JSON, riduci il testo, oppure usa Anthropic.",
+    });
+  }
+
+  return normalized.slice(0, 60);
+};
+
 const mergeLocalAnalysisChunks = (partials, sourceElements = []) => {
   const sceneHeadings = sourceElements.filter(isRealSceneHeading).map((element) => element.content);
   const mergedScenes = [];
@@ -1101,7 +1145,7 @@ const mergeLocalAnalysisChunks = (partials, sourceElements = []) => {
         numero: index + 1,
         titolo: scene.titolo || sceneHeadings[index] || `Scena ${index + 1}`,
       })),
-    segnalazioni: mergedSignals.slice(0, 60),
+    segnalazioni: normalizeMergedAnalysisSignals(mergedSignals),
     valutazione_globale: {
       punteggio_struttura: averageScores(partials, "punteggio_struttura"),
       punteggio_personaggi: averageScores(partials, "punteggio_personaggi"),
