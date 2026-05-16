@@ -644,15 +644,15 @@ const estimateElementLines = (element) => {
 
 const isRealSceneHeading = (element) => (
   element?.type === "scene_heading"
-  && /^(?:\d+\s+)?(?:INT|EST|INT\/EST|INT\.\/EST|I\/E|EXT)\.?\b/i.test(String(element?.content || "").trim())
+  && /^(?:\d+[A-Z]?[\s.]*)?(?:INT|EST|INT\/EST|INT\.\/EST|INT-EST|I\/E|EXT)\.?\b/i.test(String(element?.content || "").trim())
 );
 
-const SCENE_HEADING_RE = /^(?:\d+[A-Z]?\s+)?(?:INT|EST|INT\/EST|INT\.\/EST|INT-EST|I\/E|EXT)\.?\s+/i;
+const SCENE_HEADING_RE = /^(?:\d+[A-Z]?[\s.]*)?(?:INT|EST|INT\/EST|INT\.\/EST|INT-EST|I\/E|EXT)\.?(?:\s+|$)/i;
 const TRANSITION_RE = /^(?:FADE IN|FADE OUT|CUT TO|TAGLIO A|DISSOLVENZA(?:\s+A|\s+IN|\s+OUT)?|FONDUTA(?:\s+AL\s+NERO)?|SMASH CUT TO|MATCH CUT TO|JUMP CUT TO|STACCO A)\s*:?\s*$/i;
 const CHARACTER_SUFFIX_RE = /\s+\((?:V\.O\.|O\.S\.|O\.C\.|F\.C\.|CONT'D|CONTINUED|FUORI CAMPO|VOCE OFF)\)$/i;
 
 const stripInlineSceneNumber = (line) => (
-  line.replace(/^\s*\d+[A-Z]?\s+((?:INT|EST|INT\/EST|INT\.\/EST|INT-EST|I\/E|EXT)\.?\s+.*?)(?:\s+\d+[A-Z]?)?\s*$/i, "$1").trim()
+  line.replace(/^\s*\d+[A-Z]?[\s.]*((?:INT|EST|INT\/EST|INT\.\/EST|INT-EST|I\/E|EXT)\.?(?:\s+|$).*?)(?:\s+\d+[A-Z]?)?\s*$/i, "$1").trim()
 );
 
 const isSceneHeadingLine = (line) => SCENE_HEADING_RE.test(stripInlineSceneNumber(line));
