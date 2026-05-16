@@ -2671,6 +2671,30 @@ const buildWorkPlanFromScenes = (perScena, strategy) => {
   return days;
 };
 
+const normalizeInitialWorkPlan = (workPlanSource, perScena) => {
+  const scenes = asArray(perScena).filter((scene) => scene?.numero);
+  const source = asArray(workPlanSource)
+    .map((day, index) => ({
+      ...day,
+      giorno: index + 1,
+      scene_consigliate: sceneNumbersFromDay(day),
+    }))
+    .filter((day) => day.scene_consigliate.length > 0);
+
+  if (!scenes.length) return source;
+
+  const maxReasonableDays = Math.max(5, Math.ceil(scenes.length / 2));
+  if (!source.length || source.length > maxReasonableDays) {
+    return buildWorkPlanFromScenes(scenes, "location").map((day) => ({
+      ...day,
+      motivazione: `${day.motivazione} Piano iniziale ricalcolato perché quello AI era troppo frammentato.`,
+      ricalcolato_da_app: true,
+    }));
+  }
+
+  return source;
+};
+
 const dateInputToDate = (value) => {
   if (!value) return null;
   const [year, month, day] = String(value).split("-").map(Number);
@@ -2701,16 +2725,17 @@ function EmptyBreakdownSection({ label }) {
 function BreakdownPanel({ data }) {
   if (!data) return null;
   const workPlanSource = data.piano_lavoro_suggerito || data.piano_riprese_suggerito;
+  const initialWorkPlan = normalizeInitialWorkPlan(workPlanSource, data.per_scena);
   const panelKey = JSON.stringify({
     sceneNumbers: asArray(data.per_scena).map((scene) => scene.numero),
-    workPlanSource,
+    workPlanSource: initialWorkPlan,
   });
 
   return (
     <BreakdownPanelContent
       key={panelKey}
       data={data}
-      initialWorkPlan={asArray(workPlanSource)}
+      initialWorkPlan={initialWorkPlan}
     />
   );
 }
