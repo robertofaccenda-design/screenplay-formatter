@@ -194,6 +194,51 @@ const DIRECTOR_STYLES = {
   },
 };
 
+const PROCESS_STEPS = [
+  {
+    id: "parse",
+    label: "Parse",
+    icon: "DOC",
+    desc: "Import testo, TXT, DOCX o PDF",
+    targetTab: "preview",
+  },
+  {
+    id: "classify",
+    label: "Classifica",
+    icon: "INT",
+    desc: "Scene, azioni, personaggi e dialoghi",
+    targetTab: "struttura",
+  },
+  {
+    id: "format",
+    label: "Formatta",
+    icon: "FMT",
+    desc: "Sceneggiatura in formato italiano",
+    targetTab: "preview",
+  },
+  {
+    id: "analyze",
+    label: "Analizza",
+    icon: "AI",
+    desc: "Drammaturgia, personaggi, location e reparti",
+    targetTab: "analisi",
+  },
+  {
+    id: "storyboard",
+    label: "Storyboard",
+    icon: "FRM",
+    desc: "Prompt visivi e sidecar ComfyUI",
+    targetTab: "director",
+  },
+  {
+    id: "export",
+    label: "Export",
+    icon: "OUT",
+    desc: "Fountain, HTML, PDF e materiali operativi",
+    targetTab: "fountain",
+  },
+];
+
 const buildOrganicInstructions = (options = DEFAULT_ORGANIC_OPTIONS) => {
   const normalized = { ...DEFAULT_ORGANIC_OPTIONS, ...options };
   const instructions = [
@@ -1740,6 +1785,184 @@ function DeepFrameDirectorPanel({ elements }) {
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+const getProcessStepState = (stepId, data) => {
+  const {
+    rawText,
+    elements,
+    analysis,
+    characterSheets,
+    breakdown,
+    locationSheets,
+  } = data;
+  const hasInput = rawText.trim().length > 0;
+  const hasElements = Array.isArray(elements) && elements.length > 0;
+  const hasAnalysisArtifacts = Boolean(analysis || characterSheets || breakdown || locationSheets);
+
+  if (stepId === "parse") return hasInput ? "done" : "active";
+  if (stepId === "classify") return hasElements ? "done" : hasInput ? "active" : "idle";
+  if (stepId === "format") return hasElements ? "done" : hasInput ? "active" : "idle";
+  if (stepId === "analyze") return hasAnalysisArtifacts ? "done" : hasElements ? "active" : "idle";
+  if (stepId === "storyboard") return hasElements ? "active" : "idle";
+  if (stepId === "export") return hasElements ? "active" : "idle";
+  return "idle";
+};
+
+function ProcessPipelineBar({ processData, onStepClick }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 0, overflowX: "auto", paddingBottom: "6px" }}>
+      {PROCESS_STEPS.map((step, index) => {
+        const state = getProcessStepState(step.id, processData);
+        const isDone = state === "done";
+        const isActive = state === "active";
+        return (
+          <div key={step.id} style={{ display: "flex", alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={() => onStepClick(step)}
+              disabled={state === "idle"}
+              style={{
+                minWidth: 96,
+                minHeight: 68,
+                borderRadius: "8px",
+                border: isActive ? "1px solid #c8a96e" : isDone ? "1px solid rgba(100,200,120,.38)" : "1px solid rgba(255,255,255,.08)",
+                background: isActive ? "linear-gradient(135deg,#c8a96e,#e8c98e)" : isDone ? "rgba(100,200,120,.08)" : "rgba(255,255,255,.025)",
+                color: isActive ? "#111118" : isDone ? "#80d892" : "#555",
+                cursor: state === "idle" ? "default" : "pointer",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "5px",
+                padding: "9px 12px",
+                fontFamily: "sans-serif",
+                transition: "all .2s",
+              }}
+            >
+              <span style={{ fontFamily: "monospace", fontSize: "12px", fontWeight: "bold", letterSpacing: "1px" }}>{step.icon}</span>
+              <span style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: "1px", fontWeight: "bold" }}>{step.label}</span>
+            </button>
+            {index < PROCESS_STEPS.length - 1 && (
+              <div style={{
+                width: 28,
+                height: 1,
+                background: isDone ? "rgba(100,200,120,.45)" : "rgba(255,255,255,.08)",
+                flexShrink: 0,
+              }} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DeepFrameProcessPanel({
+  rawText,
+  elements,
+  analysis,
+  characterSheets,
+  breakdown,
+  locationSheets,
+  setActiveTab,
+}) {
+  const processData = { rawText, elements, analysis, characterSheets, breakdown, locationSheets };
+  const sceneCount = elements?.filter(isRealSceneHeading).length || 0;
+  const dialogueCount = elements?.filter((element) => element.type === "dialogue").length || 0;
+  const characterCount = elements ? new Set(elements.filter((element) => element.type === "character").map((element) => element.content)).size : 0;
+  const readyReports = [
+    analysis && "Analisi",
+    characterSheets && "Schede personaggio",
+    breakdown && "Breakdown",
+    locationSheets && "Location",
+  ].filter(Boolean);
+
+  const handleStepClick = (step) => {
+    if (step.id === "analyze" && !analysis) {
+      setActiveTab(readyReports.length ? "breakdown" : "process");
+      return;
+    }
+    setActiveTab(step.targetTab);
+  };
+
+  return (
+    <div style={{ flex: 1, overflowY: "auto", padding: "22px 24px", background: "linear-gradient(135deg, rgba(14,12,10,.92), rgba(12,13,20,.96))" }}>
+      <div style={{ maxWidth: 1120, margin: "0 auto", display: "flex", flexDirection: "column", gap: "18px" }}>
+        <section style={{ border: "1px solid rgba(200,169,110,.18)", background: "rgba(255,255,255,.025)", borderRadius: "8px", padding: "18px 20px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "14px", alignItems: "flex-start", marginBottom: "16px", flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: "18px", color: "#f0ead8", fontFamily: "sans-serif", fontWeight: "bold" }}>Processo di creazione</div>
+              <div style={{ fontSize: "12px", color: "#888", fontFamily: "sans-serif", lineHeight: "1.55", marginTop: "4px" }}>
+                Dal documento iniziale alla sceneggiatura analizzata, pronta per pre-produzione, storyboard ed export.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "7px", flexWrap: "wrap" }}>
+              {[
+                [`${sceneCount}`, "scene"],
+                [`${characterCount}`, "personaggi"],
+                [`${dialogueCount}`, "battute"],
+                [`${readyReports.length}`, "report"],
+              ].map(([value, label]) => (
+                <div key={label} style={{ minWidth: "70px", border: "1px solid rgba(255,255,255,.08)", background: "rgba(0,0,0,.18)", borderRadius: "7px", padding: "7px 9px", textAlign: "center" }}>
+                  <div style={{ color: "#c8a96e", fontSize: "16px", fontFamily: "sans-serif", fontWeight: "bold" }}>{value}</div>
+                  <div style={{ color: "#666", fontSize: "10px", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px" }}>{label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <ProcessPipelineBar processData={processData} onStepClick={handleStepClick} />
+        </section>
+
+        <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: "12px" }}>
+          {PROCESS_STEPS.map((step) => {
+            const state = getProcessStepState(step.id, processData);
+            const statusLabel = state === "done" ? "Completato" : state === "active" ? "Pronto" : "In attesa";
+            const statusColor = state === "done" ? "#64C878" : state === "active" ? "#c8a96e" : "#666";
+            return (
+              <button
+                key={step.id}
+                type="button"
+                disabled={state === "idle"}
+                onClick={() => handleStepClick(step)}
+                style={{
+                  textAlign: "left",
+                  border: `1px solid ${state === "active" ? "rgba(200,169,110,.28)" : state === "done" ? "rgba(100,200,120,.2)" : "rgba(255,255,255,.06)"}`,
+                  background: state === "active" ? "rgba(200,169,110,.075)" : "rgba(255,255,255,.025)",
+                  borderRadius: "8px",
+                  padding: "14px 15px",
+                  cursor: state === "idle" ? "default" : "pointer",
+                  minHeight: "120px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
+                  <span style={{ width: 34, height: 34, borderRadius: "7px", display: "grid", placeItems: "center", border: `1px solid ${statusColor}44`, color: statusColor, background: `${statusColor}14`, fontFamily: "monospace", fontSize: "11px", fontWeight: "bold" }}>{step.icon}</span>
+                  <div>
+                    <div style={{ color: "#f0ead8", fontFamily: "sans-serif", fontWeight: "bold", fontSize: "13px" }}>{step.label}</div>
+                    <div style={{ color: statusColor, fontFamily: "sans-serif", fontSize: "10px", textTransform: "uppercase", letterSpacing: "1px", marginTop: "2px" }}>{statusLabel}</div>
+                  </div>
+                </div>
+                <div style={{ color: state === "idle" ? "#555" : "#aaa", fontFamily: "sans-serif", fontSize: "12px", lineHeight: "1.55" }}>{step.desc}</div>
+              </button>
+            );
+          })}
+        </section>
+
+        <section style={{ border: "1px solid rgba(255,255,255,.07)", background: "rgba(0,0,0,.16)", borderRadius: "8px", padding: "14px 16px" }}>
+          <div style={{ color: "#888", fontFamily: "sans-serif", fontSize: "10px", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px" }}>Stato operativo</div>
+          <div style={{ color: "#bbb", fontFamily: "sans-serif", fontSize: "13px", lineHeight: "1.65" }}>
+            {!rawText.trim() && "Carica un documento o scegli un template per iniziare il processo."}
+            {rawText.trim() && !elements && "Il testo e pronto: avvia Parsing Conservativo o Formattazione Creativa per generare la sceneggiatura strutturata."}
+            {elements && !readyReports.length && "La sceneggiatura e formattata: puoi generare analisi, schede, breakdown, location o passare a Director per lo storyboard."}
+            {elements && readyReports.length > 0 && `Materiali gia pronti: ${readyReports.join(", ")}. Puoi continuare con Director o preparare gli export.`}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
@@ -4884,6 +5107,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
         <div style={s.content}>
           {/* Tab bar principale */}
           <div style={s.tabs}>
+            {tabBtn("process", "Processo", activeTab === "process")}
             {elements && (
               <>
               {tabBtn("preview", "Anteprima", activeTab === "preview")}
@@ -4966,7 +5190,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
             )}
 
             {/* Stato vuoto */}
-            {!loading && !analyzing && !elements && activeTab !== "lumina" && (
+            {!loading && !analyzing && !elements && activeTab !== "lumina" && activeTab !== "process" && (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "12px", color: "#666", fontFamily: "sans-serif" }}>
                 <div style={{ fontSize: "48px" }}>🎞️</div>
                 <div style={{ fontSize: "16px", color: "#555" }}>Carica un file e avvia la formattazione</div>
@@ -4982,6 +5206,19 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
             {/* Tab: Lumina Studio */}
             {!busy && activeTab === "lumina" && (
               <LuminaStudioPanel />
+            )}
+
+            {/* Tab: Processo */}
+            {!busy && activeTab === "process" && (
+              <DeepFrameProcessPanel
+                rawText={rawText}
+                elements={elements}
+                analysis={analysis}
+                characterSheets={characterSheets}
+                breakdown={breakdown}
+                locationSheets={locationSheets}
+                setActiveTab={setActiveTab}
+              />
             )}
 
             {/* Tab: DeepFrame Director */}
