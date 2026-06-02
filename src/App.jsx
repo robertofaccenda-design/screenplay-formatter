@@ -99,6 +99,101 @@ const DEFAULT_ORGANIC_OPTIONS = {
   note: "",
 };
 
+const SCREENPLAY_TEMPLATES = [
+  {
+    id: "standard-ita",
+    label: "ITA standard",
+    title: "Sceneggiatura italiana standard",
+    text: `TITOLO: Nuovo progetto
+
+INT. CASA - GIORNO
+
+La stanza e ordinata, ma qualcosa stona. Sul tavolo c'e un oggetto che nessuno dovrebbe aver lasciato li.
+
+PERSONAGGIO
+Non doveva succedere cosi.
+
+EST. STRADA - NOTTE
+
+Il quartiere e silenzioso. Una luce si accende al terzo piano.`,
+  },
+  {
+    id: "short-film",
+    label: "Corto",
+    title: "Cortometraggio",
+    text: `TITOLO: Cortometraggio
+
+INT. LUOGO PRINCIPALE - GIORNO
+
+Il protagonista entra in un luogo familiare che oggi sembra diverso.
+
+PROTAGONISTA
+Avevo detto che sarei tornato solo una volta.
+
+EST. LUOGO PRINCIPALE - TRAMONTO
+
+La scelta finale resta sospesa per un istante, poi il protagonista agisce.`,
+  },
+  {
+    id: "doc",
+    label: "Documentario",
+    title: "Documentario",
+    text: `TITOLO: Documentario
+
+EST. LOCATION REALE - GIORNO
+
+Immagini d'ambiente. Dettagli del luogo, persone al lavoro, suoni naturali.
+
+VOCE NARRANTE
+Ogni storia comincia da un gesto che sembra piccolo.
+
+INT. ARCHIVIO - GIORNO
+
+Fotografie, documenti, materiali d'epoca. Una mano sfoglia lentamente le prove.`,
+  },
+  {
+    id: "series",
+    label: "Serie TV",
+    title: "Episodio serie",
+    text: `TITOLO: Episodio pilota
+
+TEASER
+
+EST. LUOGO ICONICO - NOTTE
+
+Un evento inatteso apre la storia e costringe i personaggi a reagire.
+
+ATTO 1
+
+INT. BASE OPERATIVA - GIORNO
+
+I personaggi principali discutono il problema. La posta in gioco diventa chiara.`,
+  },
+];
+
+const DIRECTOR_STYLES = {
+  cinematic: {
+    label: "Cinematografico",
+    suffix: "cinematic composition, naturalistic lighting, production still, 35mm lens, subtle film grain",
+    negative: "flat lighting, amateur framing, distorted faces, unreadable scene, low detail",
+  },
+  noir: {
+    label: "Noir",
+    suffix: "high contrast noir lighting, deep shadows, smoke, expressive silhouettes, dramatic black and amber palette",
+    negative: "bright sitcom lighting, saturated cartoon colors, clean corporate look, weak shadows",
+  },
+  realism: {
+    label: "Fotorealistico",
+    suffix: "photorealistic film still, accurate location texture, natural skin, believable props, balanced depth of field",
+    negative: "plastic skin, fantasy costume, overprocessed HDR, unrealistic anatomy, cluttered frame",
+  },
+  storyboard: {
+    label: "Storyboard B/N",
+    suffix: "black and white storyboard frame, clear blocking, pencil texture, cinematic shot planning",
+    negative: "finished glossy render, color illustration, messy sketch, unreadable layout",
+  },
+};
+
 const buildOrganicInstructions = (options = DEFAULT_ORGANIC_OPTIONS) => {
   const normalized = { ...DEFAULT_ORGANIC_OPTIONS, ...options };
   const instructions = [
@@ -1314,6 +1409,339 @@ function getScenePageEighths(elements) {
 
   closeScene();
   return sceneData;
+}
+
+const hashText = (value) => {
+  const text = String(value || "");
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = ((hash << 5) - hash + text.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+};
+
+const getSceneExcerpt = (scene) => (
+  scene.actions.join(" ").replace(/\s+/g, " ").trim().slice(0, 420)
+);
+
+const extractDirectorScenes = (elements = []) => {
+  const scenes = [];
+  let current = null;
+  let currentCharacter = "";
+
+  const closeScene = () => {
+    if (!current) return;
+    const signatureSource = [
+      current.heading,
+      current.actions.join(" "),
+      current.characters.join(","),
+      current.dialogue.join(" "),
+    ].join("|");
+    scenes.push({
+      ...current,
+      excerpt: getSceneExcerpt(current),
+      signature: hashText(signatureSource),
+    });
+  };
+
+  elements.forEach((element) => {
+    if (isRealSceneHeading(element)) {
+      closeScene();
+      const meta = parseSceneHeadingMeta(element.content);
+      current = {
+        number: scenes.length + 1,
+        heading: element.content,
+        meta,
+        actions: [],
+        characters: [],
+        dialogue: [],
+      };
+      currentCharacter = "";
+      return;
+    }
+
+    if (!current) return;
+    if (element.type === "action") current.actions.push(element.content);
+    if (element.type === "character") {
+      currentCharacter = String(element.content || "").trim().toUpperCase();
+      if (currentCharacter && !current.characters.includes(currentCharacter)) current.characters.push(currentCharacter);
+    }
+    if (element.type === "dialogue" && currentCharacter) {
+      current.dialogue.push(`${currentCharacter}: ${element.content}`);
+    }
+  });
+
+  closeScene();
+  return scenes;
+};
+
+const buildDirectorPrompt = (scene, config) => {
+  const style = DIRECTOR_STYLES[config.style] || DIRECTOR_STYLES.cinematic;
+  const cast = scene.characters.length ? `characters: ${scene.characters.join(", ")}` : "no clearly identified speaking characters";
+  const camera = config.camera === "wide" ? "wide establishing shot"
+    : config.camera === "medium" ? "medium shot"
+      : config.camera === "close" ? "close-up with emotional detail"
+        : "dynamic director's view";
+  const period = config.period.trim() ? `period and production design: ${config.period.trim()}` : "contemporary production design unless the screenplay implies otherwise";
+  return [
+    `${camera}, ${scene.meta.internoEsterno} ${scene.meta.location}, ${scene.meta.momento.toLowerCase()}`,
+    cast,
+    `scene action: ${scene.excerpt || scene.heading}`,
+    period,
+    style.suffix,
+  ].join(", ");
+};
+
+const buildDirectorShot = (scene, config, previousShot) => {
+  const prompt = buildDirectorPrompt(scene, config);
+  const negativePrompt = DIRECTOR_STYLES[config.style]?.negative || DIRECTOR_STYLES.cinematic.negative;
+  return {
+    sceneNumber: scene.number,
+    heading: scene.heading,
+    location: scene.meta.location,
+    environment: scene.meta.internoEsterno,
+    moment: scene.meta.momento,
+    cast: scene.characters,
+    excerpt: scene.excerpt,
+    signature: scene.signature,
+    prompt,
+    negativePrompt,
+    status: previousShot?.signature === scene.signature && previousShot?.prompt === prompt ? previousShot.status : "ready",
+    frameSeed: previousShot?.signature === scene.signature ? previousShot.frameSeed : hashText(`${scene.signature}-${prompt}`),
+    generatedAt: previousShot?.signature === scene.signature ? previousShot.generatedAt : null,
+  };
+};
+
+const buildDirectorSidecar = ({ shots, config, comfyUrl }) => ({
+  deepframe_module: "director_storyboard",
+  version: 1,
+  generated_at: new Date().toISOString(),
+  comfyui: {
+    endpoint: comfyUrl,
+    workflow_hint: "Inject prompt and negativePrompt into a text-to-image workflow, then map each result back by sceneNumber.",
+  },
+  config,
+  shots: shots.map((shot) => ({
+    sceneNumber: shot.sceneNumber,
+    heading: shot.heading,
+    location: shot.location,
+    environment: shot.environment,
+    moment: shot.moment,
+    cast: shot.cast,
+    prompt: shot.prompt,
+    negativePrompt: shot.negativePrompt,
+    signature: shot.signature,
+    status: shot.status,
+  })),
+});
+
+function DirectorFrame({ shot }) {
+  const hue = parseInt(shot.frameSeed.slice(0, 2), 36) % 360;
+  const accent = `hsl(${hue}, 55%, 48%)`;
+  const warm = shot.status === "generated" ? "rgba(200,169,110,.22)" : "rgba(255,255,255,.06)";
+  return (
+    <div style={{
+      aspectRatio: "16/9",
+      background: `
+        linear-gradient(135deg, rgba(4,5,8,.96), rgba(22,18,14,.94)),
+        radial-gradient(circle at 28% 34%, ${warm}, transparent 36%),
+        radial-gradient(circle at 76% 62%, ${accent}66, transparent 34%)
+      `,
+      borderBottom: "1px solid rgba(255,255,255,.06)",
+      position: "relative",
+      overflow: "hidden",
+    }}>
+      <div style={{ position: "absolute", inset: "11% 9%", border: "1px solid rgba(255,255,255,.12)", borderRadius: "4px" }} />
+      <div style={{ position: "absolute", left: "12%", right: "12%", bottom: "16%", height: "28%", background: "linear-gradient(180deg, transparent, rgba(0,0,0,.45))", borderRadius: "50%" }} />
+      <div style={{ position: "absolute", left: "16%", bottom: "20%", width: "16%", height: "38%", borderRadius: "48% 48% 10% 10%", background: "rgba(232,201,142,.18)", boxShadow: `0 0 34px ${accent}44` }} />
+      {shot.cast.length > 1 && (
+        <div style={{ position: "absolute", right: "18%", bottom: "20%", width: "14%", height: "32%", borderRadius: "48% 48% 10% 10%", background: "rgba(79,195,247,.14)" }} />
+      )}
+      <div style={{ position: "absolute", left: 12, top: 10, fontSize: "10px", color: "#c8a96e", fontFamily: "monospace", letterSpacing: "1px" }}>SC.{shot.sceneNumber}</div>
+      <div style={{ position: "absolute", right: 12, top: 10, fontSize: "10px", color: shot.status === "generated" ? "#64C878" : "#777", fontFamily: "monospace", letterSpacing: "1px" }}>
+        {shot.status === "generated" ? "FRAME" : "PROMPT"}
+      </div>
+    </div>
+  );
+}
+
+function DeepFrameDirectorPanel({ elements }) {
+  const scenes = useMemo(() => extractDirectorScenes(elements), [elements]);
+  const [config, setConfig] = useState({
+    style: "cinematic",
+    camera: "wide",
+    model: "cinematicVision_v1.safetensors",
+    steps: 28,
+    period: "",
+  });
+  const [comfyUrl, setComfyUrl] = useState("http://127.0.0.1:8188");
+  const [shotStates, setShotStates] = useState({});
+  const [selectedSceneState, setSelectedScene] = useState(null);
+  const shots = useMemo(() => scenes.map((scene) => (
+    buildDirectorShot(scene, config, shotStates[scene.number])
+  )), [scenes, config, shotStates]);
+  const selectedScene = selectedSceneState || scenes[0]?.number || null;
+  const selectedShot = shots.find((shot) => shot.sceneNumber === selectedScene) || shots[0];
+  const generatedCount = shots.filter((shot) => shot.status === "generated").length;
+  const changedCount = shots.filter((shot) => shot.status !== "generated").length;
+
+  const updateConfig = (key, value) => {
+    setConfig((current) => ({ ...current, [key]: value }));
+  };
+
+  const markSceneGenerated = (sceneNumber) => {
+    const shot = shots.find((item) => item.sceneNumber === sceneNumber);
+    if (!shot) return;
+    setShotStates((current) => ({
+      ...current,
+      [sceneNumber]: { ...shot, status: "generated", generatedAt: new Date().toISOString() },
+    }));
+  };
+
+  const generateChanged = () => {
+    const generatedAt = new Date().toISOString();
+    setShotStates((current) => ({
+      ...current,
+      ...Object.fromEntries(shots.map((shot) => [
+        shot.sceneNumber,
+        shot.status === "generated" ? shot : { ...shot, status: "generated", generatedAt },
+      ])),
+    }));
+  };
+
+  const resetScene = (sceneNumber) => {
+    setShotStates((current) => {
+      const next = { ...current };
+      delete next[sceneNumber];
+      return next;
+    });
+  };
+
+  const exportSidecar = () => {
+    const sidecar = buildDirectorSidecar({ shots, config, comfyUrl });
+    const blob = new Blob([JSON.stringify(sidecar, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "deepframe-director-sidecar.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  if (!scenes.length) {
+    return (
+      <div style={{ flex: 1, display: "grid", placeItems: "center", color: "#666", fontFamily: "sans-serif" }}>
+        Nessuna scena rilevata. Aggiungi intestazioni INT./EST. e riapri Director.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ flex: 1, overflow: "hidden", display: "grid", gridTemplateColumns: "minmax(260px, 320px) 1fr", minHeight: 0 }}>
+      <aside style={{ borderRight: "1px solid rgba(255,255,255,.06)", padding: "18px", overflowY: "auto", background: "rgba(255,255,255,.015)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", marginBottom: "14px" }}>
+          <div>
+            <div style={{ color: "#f0ead8", fontFamily: "sans-serif", fontWeight: "bold", fontSize: "14px" }}>DeepFrame Director</div>
+            <div style={{ color: "#777", fontFamily: "sans-serif", fontSize: "11px", marginTop: "3px" }}>{generatedCount}/{shots.length} frame pronti · {changedCount} da aggiornare</div>
+          </div>
+          <button onClick={generateChanged} style={{ border: "1px solid rgba(200,169,110,.35)", background: "rgba(200,169,110,.12)", color: "#c8a96e", borderRadius: "6px", padding: "7px 9px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
+            Batch
+          </button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: "5px", fontSize: "10px", color: "#777", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px" }}>
+            Server ComfyUI
+            <input value={comfyUrl} onChange={(event) => setComfyUrl(event.target.value)} style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "6px", color: "#bbb", padding: "8px 9px", fontSize: "12px", fontFamily: "monospace", textTransform: "none", letterSpacing: 0 }} />
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: "5px", fontSize: "10px", color: "#777", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px" }}>
+            Stile
+            <select value={config.style} onChange={(event) => updateConfig("style", event.target.value)} style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "6px", color: "#ddd", padding: "8px 9px", fontSize: "12px", fontFamily: "sans-serif" }}>
+              {Object.entries(DIRECTOR_STYLES).map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}
+            </select>
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: "5px", fontSize: "10px", color: "#777", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px" }}>
+            Camera
+            <select value={config.camera} onChange={(event) => updateConfig("camera", event.target.value)} style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "6px", color: "#ddd", padding: "8px 9px", fontSize: "12px", fontFamily: "sans-serif" }}>
+              <option value="wide">Campo largo</option>
+              <option value="medium">Piano medio</option>
+              <option value="close">Primo piano</option>
+              <option value="dynamic">Dinamica</option>
+            </select>
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: "5px", fontSize: "10px", color: "#777", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px" }}>
+            Periodo / look
+            <input value={config.period} onChange={(event) => updateConfig("period", event.target.value)} placeholder="es. Roma anni '60, thriller urbano..." style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "6px", color: "#bbb", padding: "8px 9px", fontSize: "12px", fontFamily: "sans-serif", textTransform: "none", letterSpacing: 0 }} />
+          </label>
+          <button onClick={exportSidecar} style={{ border: "1px solid rgba(79,195,247,.28)", background: "rgba(79,195,247,.08)", color: "#4FC3F7", borderRadius: "6px", padding: "8px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
+            Esporta sidecar JSON
+          </button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          {shots.map((shot) => (
+            <button key={shot.sceneNumber} onClick={() => setSelectedScene(shot.sceneNumber)} style={{
+              textAlign: "left",
+              border: `1px solid ${selectedShot?.sceneNumber === shot.sceneNumber ? "rgba(200,169,110,.35)" : "rgba(255,255,255,.06)"}`,
+              background: selectedShot?.sceneNumber === shot.sceneNumber ? "rgba(200,169,110,.09)" : "rgba(255,255,255,.025)",
+              borderRadius: "7px",
+              padding: "9px 10px",
+              cursor: "pointer",
+            }}>
+              <div style={{ display: "flex", gap: "7px", alignItems: "center", marginBottom: "4px" }}>
+                <span style={{ fontSize: "10px", color: "#c8a96e", fontFamily: "monospace" }}>SC.{shot.sceneNumber}</span>
+                <span style={{ fontSize: "10px", color: shot.status === "generated" ? "#64C878" : "#777", fontFamily: "sans-serif", marginLeft: "auto" }}>{shot.status === "generated" ? "GENERATA" : "DA FARE"}</span>
+              </div>
+              <div style={{ color: "#bbb", fontSize: "11px", fontFamily: "sans-serif", lineHeight: "1.35", overflowWrap: "anywhere" }}>{shot.heading}</div>
+            </button>
+          ))}
+        </div>
+      </aside>
+
+      <main style={{ overflowY: "auto", padding: "20px 24px" }}>
+        {selectedShot && (
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 520px) minmax(260px, 1fr)", gap: "18px", alignItems: "start" }}>
+            <section style={{ background: "rgba(255,255,255,.025)", border: "1px solid rgba(255,255,255,.07)", borderRadius: "8px", overflow: "hidden" }}>
+              <DirectorFrame shot={selectedShot} />
+              <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                  <Badge label={selectedShot.environment} color="#4FC3F7" small />
+                  <Badge label={selectedShot.moment} color={selectedShot.moment === "NOTTE" ? "#CE93D8" : "#FFD54F"} small />
+                  <Badge label={DIRECTOR_STYLES[config.style]?.label} color="#c8a96e" small />
+                </div>
+                <div style={{ color: "#f0ead8", fontFamily: "sans-serif", fontWeight: "bold", fontSize: "15px", lineHeight: "1.4" }}>{selectedShot.heading}</div>
+                {selectedShot.excerpt && <div style={{ color: "#999", fontFamily: "Georgia, serif", fontSize: "13px", lineHeight: "1.65" }}>{selectedShot.excerpt}</div>}
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button onClick={() => markSceneGenerated(selectedShot.sceneNumber)} style={{ border: "1px solid rgba(100,200,120,.32)", background: "rgba(100,200,120,.09)", color: "#64C878", borderRadius: "6px", padding: "8px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
+                    Segna generata
+                  </button>
+                  <button onClick={() => resetScene(selectedShot.sceneNumber)} style={{ border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.05)", color: "#aaa", borderRadius: "6px", padding: "8px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
+                    Invalida scena
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div style={{ background: "rgba(200,169,110,.055)", border: "1px solid rgba(200,169,110,.18)", borderRadius: "8px", padding: "14px 16px" }}>
+                <div style={{ color: "#c8a96e", fontFamily: "sans-serif", fontSize: "10px", textTransform: "uppercase", letterSpacing: "1px", fontWeight: "bold", marginBottom: "8px" }}>Prompt ComfyUI</div>
+                <div style={{ color: "#ddd", fontFamily: "monospace", fontSize: "12px", lineHeight: "1.65", overflowWrap: "anywhere" }}>{selectedShot.prompt}</div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,.025)", border: "1px solid rgba(255,255,255,.07)", borderRadius: "8px", padding: "14px 16px" }}>
+                <div style={{ color: "#888", fontFamily: "sans-serif", fontSize: "10px", textTransform: "uppercase", letterSpacing: "1px", fontWeight: "bold", marginBottom: "8px" }}>Negative prompt</div>
+                <div style={{ color: "#aaa", fontFamily: "monospace", fontSize: "12px", lineHeight: "1.65", overflowWrap: "anywhere" }}>{selectedShot.negativePrompt}</div>
+              </div>
+              {selectedShot.cast.length > 0 && (
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                  {selectedShot.cast.map((name) => <Badge key={name} label={name} color="#FFD54F" small />)}
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+      </main>
+    </div>
+  );
 }
 
 function buildScreenplayHtml(elements, { scenePageBreaks = false } = {}) {
@@ -3725,6 +4153,18 @@ export default function App() {
     if (f) handleFile(f);
   }, [handleFile]);
 
+  const applyTemplate = (template) => {
+    setRawText(template.text);
+    setFile(null);
+    setElements(null);
+    setAnalysis(null);
+    setCharacterSheets(null);
+    setBreakdown(null);
+    setLocationSheets(null);
+    setError("");
+    setActiveTab("preview");
+  };
+
   const importFormattedScreenplay = () => {
     const text = rawText.trim();
     if (!text) return;
@@ -4099,6 +4539,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
     btnSheets:    { background: canRunSheets ? "linear-gradient(135deg,#00897B,#00695C)" : "rgba(0,137,123,.15)", color: canRunSheets ? "#fff" : "#00897B", border: "1px solid rgba(0,137,123,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canRunSheets ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canRunSheets ? 1 : 0.5 },
     btnBreakdown: { background: canRunBreakdown ? "linear-gradient(135deg,#E65100,#BF360C)" : "rgba(230,81,0,.15)", color: canRunBreakdown ? "#fff" : "#E65100", border: "1px solid rgba(230,81,0,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canRunBreakdown ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canRunBreakdown ? 1 : 0.5 },
     btnLocations: { background: !busy ? "linear-gradient(135deg,#0277BD,#01579B)" : "rgba(2,119,189,.15)", color: !busy ? "#fff" : "#0277BD", border: "1px solid rgba(2,119,189,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: !busy ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: !busy ? 1 : 0.5 },
+    btnDirector: { background: !busy ? "linear-gradient(135deg,#263238,#c8a96e)" : "rgba(200,169,110,.1)", color: !busy ? "#fff" : "#8a7650", border: "1px solid rgba(200,169,110,.35)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: !busy ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: !busy ? 1 : 0.5 },
     btnSec:     { background: "rgba(255,255,255,.06)", color: "#ccc", border: "1px solid rgba(255,255,255,.12)", borderRadius: "8px", padding: "10px 16px", fontSize: "13px", cursor: "pointer", fontFamily: "sans-serif", flex: 1 },
     organicPanel: { background: "rgba(79,195,247,.055)", border: "1px solid rgba(79,195,247,.18)", borderRadius: "8px", padding: "12px", display: "flex", flexDirection: "column", gap: "10px" },
     organicSelect: { width: "100%", background: "rgba(0,0,0,.22)", border: "1px solid rgba(255,255,255,.12)", borderRadius: "6px", color: "#ddd", fontFamily: "sans-serif", fontSize: "12px", padding: "9px", boxSizing: "border-box" },
@@ -4277,6 +4718,34 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
             )}
           </div>
 
+          <div>
+            <div style={s.label}>Template sceneggiatura</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "7px" }}>
+              {SCREENPLAY_TEMPLATES.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  onClick={() => applyTemplate(template)}
+                  title={template.title}
+                  style={{
+                    border: "1px solid rgba(200,169,110,.22)",
+                    background: "rgba(200,169,110,.07)",
+                    color: "#c8a96e",
+                    borderRadius: "7px",
+                    padding: "8px 9px",
+                    fontSize: "11px",
+                    fontWeight: "bold",
+                    fontFamily: "sans-serif",
+                    cursor: "pointer",
+                    minHeight: "34px",
+                  }}
+                >
+                  {template.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div ref={rawTextBoxRef}>
             <div style={s.label}>Testo grezzo</div>
             <textarea
@@ -4366,6 +4835,11 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
               {loadingLocations ? "Schede location..." : locationSheets ? "Apri Schede Location" : "Schede Location"}
             </button>
           )}
+          {elements && (
+            <button style={s.btnDirector} disabled={busy} onClick={() => setActiveTab("director")}>
+              Director / Storyboard
+            </button>
+          )}
 
           {stats && (
             <div>
@@ -4421,6 +4895,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
               {characterSheets && tabBtn("schede", "Schede", activeTab === "schede")}
               {breakdown && tabBtn("breakdown", "Breakdown", activeTab === "breakdown")}
               {locationSheets && tabBtn("locations", "Location", activeTab === "locations")}
+              {elements && tabBtn("director", "Director", activeTab === "director")}
             {tabBtn("lumina", "Luci 3D", activeTab === "lumina")}
           </div>
 
@@ -4507,6 +4982,11 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
             {/* Tab: Lumina Studio */}
             {!busy && activeTab === "lumina" && (
               <LuminaStudioPanel />
+            )}
+
+            {/* Tab: DeepFrame Director */}
+            {!busy && elements && activeTab === "director" && (
+              <DeepFrameDirectorPanel elements={elements} />
             )}
 
             {/* Tab: Anteprima */}
