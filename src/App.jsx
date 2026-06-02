@@ -1580,6 +1580,128 @@ const buildDirectorSidecar = ({ shots, config, comfyUrl }) => ({
   })),
 });
 
+const buildComfyWorkflow = (shot, config) => ({
+  "3": {
+    class_type: "KSampler",
+    inputs: {
+      seed: Number.parseInt(shot.frameSeed, 36) || Math.floor(Math.random() * 999999999),
+      steps: Number(config.steps) || 28,
+      cfg: Number(config.cfg) || 7,
+      sampler_name: config.sampler || "euler",
+      scheduler: config.scheduler || "normal",
+      denoise: 1,
+      model: ["4", 0],
+      positive: ["6", 0],
+      negative: ["7", 0],
+      latent_image: ["5", 0],
+    },
+  },
+  "4": {
+    class_type: "CheckpointLoaderSimple",
+    inputs: {
+      ckpt_name: config.model || "dreamshaper_8.safetensors",
+    },
+  },
+  "5": {
+    class_type: "EmptyLatentImage",
+    inputs: {
+      width: Number(config.width) || 768,
+      height: Number(config.height) || 432,
+      batch_size: 1,
+    },
+  },
+  "6": {
+    class_type: "CLIPTextEncode",
+    inputs: {
+      text: shot.prompt,
+      clip: ["4", 1],
+    },
+  },
+  "7": {
+    class_type: "CLIPTextEncode",
+    inputs: {
+      text: shot.negativePrompt,
+      clip: ["4", 1],
+    },
+  },
+  "8": {
+    class_type: "VAEDecode",
+    inputs: {
+      samples: ["3", 0],
+      vae: ["4", 2],
+    },
+  },
+  "9": {
+    class_type: "SaveImage",
+    inputs: {
+      filename_prefix: `deepframe_scene_${String(shot.sceneNumber).padStart(3, "0")}`,
+      images: ["8", 0],
+    },
+  },
+});
+
+const normalizeComfyUrl = (url) => String(url || "").trim().replace(/\/+$/, "");
+
+const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const getComfyOutputImages = (historyItem) => Object.values(historyItem?.outputs || {})
+  .flatMap((output) => Array.isArray(output?.images) ? output.images : [])
+  .filter((image) => image?.filename);
+
+const getComfyImageUrl = (baseUrl, image) => {
+  const params = new URLSearchParams({
+    filename: image.filename,
+    subfolder: image.subfolder || "",
+    type: image.type || "output",
+  });
+  return `${baseUrl}/view?${params.toString()}`;
+};
+
+const submitComfyWorkflow = async ({ comfyUrl, shot, config }) => {
+  const baseUrl = normalizeComfyUrl(comfyUrl);
+  if (!baseUrl) throw new Error("Inserisci l'URL del server ComfyUI.");
+  if (window.location.protocol === "https:" && baseUrl.startsWith("http://")) {
+    throw new Error("Il sito HTTPS non puo chiamare ComfyUI in HTTP locale. Avvia DeepFrame in locale oppure usa un tunnel HTTPS verso ComfyUI.");
+  }
+
+  const clientId = `deepframe-${crypto.randomUUID?.() || Date.now()}`;
+  const promptResponse = await fetch(`${baseUrl}/prompt`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_id: clientId,
+      prompt: buildComfyWorkflow(shot, config),
+    }),
+  });
+  const promptPayload = await promptResponse.json().catch(() => ({}));
+  if (!promptResponse.ok) {
+    throw new Error(promptPayload?.error?.message || promptPayload?.error || "ComfyUI ha rifiutato il workflow. Controlla modello e nodi.");
+  }
+  const promptId = promptPayload.prompt_id;
+  if (!promptId) throw new Error("ComfyUI non ha restituito un prompt_id.");
+
+  for (let attempt = 0; attempt < 90; attempt += 1) {
+    await sleep(1000);
+    const historyResponse = await fetch(`${baseUrl}/history/${promptId}`);
+    const historyPayload = await historyResponse.json().catch(() => ({}));
+    const historyItem = historyPayload[promptId];
+    const images = getComfyOutputImages(historyItem);
+    if (images.length > 0) {
+      const image = images[0];
+      const imageResponse = await fetch(getComfyImageUrl(baseUrl, image));
+      if (!imageResponse.ok) throw new Error("Frame generato, ma download immagine non riuscito.");
+      const imageBlob = await imageResponse.blob();
+      return {
+        promptId,
+        image,
+        imageUrl: URL.createObjectURL(imageBlob),
+      };
+    }
+  }
+
+  throw new Error("ComfyUI non ha completato la generazione entro 90 secondi.");
+};
+
 function DirectorFrame({ shot }) {
   const hue = parseInt(shot.frameSeed.slice(0, 2), 36) % 360;
   const accent = `hsl(${hue}, 55%, 48%)`;
@@ -1596,15 +1718,21 @@ function DirectorFrame({ shot }) {
       position: "relative",
       overflow: "hidden",
     }}>
-      <div style={{ position: "absolute", inset: "11% 9%", border: "1px solid rgba(255,255,255,.12)", borderRadius: "4px" }} />
-      <div style={{ position: "absolute", left: "12%", right: "12%", bottom: "16%", height: "28%", background: "linear-gradient(180deg, transparent, rgba(0,0,0,.45))", borderRadius: "50%" }} />
-      <div style={{ position: "absolute", left: "16%", bottom: "20%", width: "16%", height: "38%", borderRadius: "48% 48% 10% 10%", background: "rgba(232,201,142,.18)", boxShadow: `0 0 34px ${accent}44` }} />
-      {shot.cast.length > 1 && (
-        <div style={{ position: "absolute", right: "18%", bottom: "20%", width: "14%", height: "32%", borderRadius: "48% 48% 10% 10%", background: "rgba(79,195,247,.14)" }} />
+      {shot.imageUrl ? (
+        <img src={shot.imageUrl} alt={`Frame scena ${shot.sceneNumber}`} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+      ) : (
+        <>
+          <div style={{ position: "absolute", inset: "11% 9%", border: "1px solid rgba(255,255,255,.12)", borderRadius: "4px" }} />
+          <div style={{ position: "absolute", left: "12%", right: "12%", bottom: "16%", height: "28%", background: "linear-gradient(180deg, transparent, rgba(0,0,0,.45))", borderRadius: "50%" }} />
+          <div style={{ position: "absolute", left: "16%", bottom: "20%", width: "16%", height: "38%", borderRadius: "48% 48% 10% 10%", background: "rgba(232,201,142,.18)", boxShadow: `0 0 34px ${accent}44` }} />
+          {shot.cast.length > 1 && (
+            <div style={{ position: "absolute", right: "18%", bottom: "20%", width: "14%", height: "32%", borderRadius: "48% 48% 10% 10%", background: "rgba(79,195,247,.14)" }} />
+          )}
+        </>
       )}
       <div style={{ position: "absolute", left: 12, top: 10, fontSize: "10px", color: "#c8a96e", fontFamily: "monospace", letterSpacing: "1px" }}>SC.{shot.sceneNumber}</div>
-      <div style={{ position: "absolute", right: 12, top: 10, fontSize: "10px", color: shot.status === "generated" ? "#64C878" : "#777", fontFamily: "monospace", letterSpacing: "1px" }}>
-        {shot.status === "generated" ? "FRAME" : "PROMPT"}
+      <div style={{ position: "absolute", right: 12, top: 10, fontSize: "10px", color: shot.status === "generated" ? "#64C878" : shot.status === "generating" ? "#c8a96e" : "#777", fontFamily: "monospace", letterSpacing: "1px" }}>
+        {shot.status === "generated" ? "FRAME" : shot.status === "generating" ? "COMFYUI" : "PROMPT"}
       </div>
     </div>
   );
@@ -1617,9 +1745,15 @@ function DeepFrameDirectorPanel({ elements }) {
     camera: "wide",
     model: "cinematicVision_v1.safetensors",
     steps: 28,
+    cfg: 7,
+    width: 768,
+    height: 432,
+    sampler: "euler",
+    scheduler: "normal",
     period: "",
   });
   const [comfyUrl, setComfyUrl] = useState("http://127.0.0.1:8188");
+  const [comfyStatus, setComfyStatus] = useState({ state: "idle", message: "Non testato" });
   const [shotStates, setShotStates] = useState({});
   const [selectedSceneState, setSelectedScene] = useState(null);
   const shots = useMemo(() => scenes.map((scene) => (
@@ -1629,29 +1763,65 @@ function DeepFrameDirectorPanel({ elements }) {
   const selectedShot = shots.find((shot) => shot.sceneNumber === selectedScene) || shots[0];
   const generatedCount = shots.filter((shot) => shot.status === "generated").length;
   const changedCount = shots.filter((shot) => shot.status !== "generated").length;
+  const generatingCount = shots.filter((shot) => shot.status === "generating").length;
 
   const updateConfig = (key, value) => {
     setConfig((current) => ({ ...current, [key]: value }));
   };
 
-  const markSceneGenerated = (sceneNumber) => {
+  const saveShotState = (sceneNumber, updater) => {
     const shot = shots.find((item) => item.sceneNumber === sceneNumber);
     if (!shot) return;
     setShotStates((current) => ({
       ...current,
-      [sceneNumber]: { ...shot, status: "generated", generatedAt: new Date().toISOString() },
+      [sceneNumber]: typeof updater === "function" ? updater(shot) : { ...shot, ...updater },
     }));
   };
 
-  const generateChanged = () => {
-    const generatedAt = new Date().toISOString();
-    setShotStates((current) => ({
-      ...current,
-      ...Object.fromEntries(shots.map((shot) => [
-        shot.sceneNumber,
-        shot.status === "generated" ? shot : { ...shot, status: "generated", generatedAt },
-      ])),
-    }));
+  const testComfyConnection = async () => {
+    const baseUrl = normalizeComfyUrl(comfyUrl);
+    setComfyStatus({ state: "checking", message: "Test connessione..." });
+    try {
+      if (window.location.protocol === "https:" && baseUrl.startsWith("http://")) {
+        throw new Error("Da sito HTTPS serve un endpoint ComfyUI HTTPS. Per localhost avvia DeepFrame in locale.");
+      }
+      const response = await fetch(`${baseUrl}/system_stats`);
+      if (!response.ok) throw new Error("ComfyUI non risponde su /system_stats.");
+      setComfyStatus({ state: "online", message: "ComfyUI online" });
+    } catch (error) {
+      setComfyStatus({ state: "error", message: error.message });
+    }
+  };
+
+  const generateSceneWithComfy = async (sceneNumber) => {
+    const shot = shots.find((item) => item.sceneNumber === sceneNumber);
+    if (!shot || shot.status === "generating") return;
+    saveShotState(sceneNumber, { ...shot, status: "generating", error: "" });
+    try {
+      const result = await submitComfyWorkflow({ comfyUrl, shot, config });
+      saveShotState(sceneNumber, {
+        ...shot,
+        status: "generated",
+        generatedAt: new Date().toISOString(),
+        promptId: result.promptId,
+        comfyImage: result.image,
+        imageUrl: result.imageUrl,
+        error: "",
+      });
+      setComfyStatus({ state: "online", message: `Frame scena ${sceneNumber} generato` });
+    } catch (error) {
+      saveShotState(sceneNumber, { ...shot, status: "ready", error: error.message });
+      setComfyStatus({ state: "error", message: error.message });
+    }
+  };
+
+  const generateChanged = async () => {
+    for (const shot of shots) {
+      if (shot.status !== "generated") {
+        // Run sequentially to avoid overloading a local ComfyUI queue.
+        await generateSceneWithComfy(shot.sceneNumber);
+      }
+    }
   };
 
   const resetScene = (sceneNumber) => {
@@ -1689,8 +1859,8 @@ function DeepFrameDirectorPanel({ elements }) {
             <div style={{ color: "#f0ead8", fontFamily: "sans-serif", fontWeight: "bold", fontSize: "14px" }}>DeepFrame Director</div>
             <div style={{ color: "#777", fontFamily: "sans-serif", fontSize: "11px", marginTop: "3px" }}>{generatedCount}/{shots.length} frame pronti · {changedCount} da aggiornare</div>
           </div>
-          <button onClick={generateChanged} style={{ border: "1px solid rgba(200,169,110,.35)", background: "rgba(200,169,110,.12)", color: "#c8a96e", borderRadius: "6px", padding: "7px 9px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
-            Batch
+          <button onClick={generateChanged} disabled={generatingCount > 0} style={{ border: "1px solid rgba(200,169,110,.35)", background: "rgba(200,169,110,.12)", color: generatingCount > 0 ? "#777" : "#c8a96e", borderRadius: "6px", padding: "7px 9px", fontSize: "11px", fontWeight: "bold", cursor: generatingCount > 0 ? "default" : "pointer" }}>
+            {generatingCount > 0 ? "Generando" : "Batch"}
           </button>
         </div>
 
@@ -1699,6 +1869,9 @@ function DeepFrameDirectorPanel({ elements }) {
             Server ComfyUI
             <input value={comfyUrl} onChange={(event) => setComfyUrl(event.target.value)} style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "6px", color: "#bbb", padding: "8px 9px", fontSize: "12px", fontFamily: "monospace", textTransform: "none", letterSpacing: 0 }} />
           </label>
+          <button onClick={testComfyConnection} style={{ border: `1px solid ${comfyStatus.state === "online" ? "rgba(100,200,120,.32)" : comfyStatus.state === "error" ? "rgba(255,107,107,.28)" : "rgba(200,169,110,.28)"}`, background: comfyStatus.state === "online" ? "rgba(100,200,120,.08)" : comfyStatus.state === "error" ? "rgba(255,107,107,.06)" : "rgba(200,169,110,.08)", color: comfyStatus.state === "online" ? "#64C878" : comfyStatus.state === "error" ? "#FF8A80" : "#c8a96e", borderRadius: "6px", padding: "8px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
+            {comfyStatus.state === "checking" ? "Test in corso..." : comfyStatus.message}
+          </button>
           <label style={{ display: "flex", flexDirection: "column", gap: "5px", fontSize: "10px", color: "#777", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px" }}>
             Stile
             <select value={config.style} onChange={(event) => updateConfig("style", event.target.value)} style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "6px", color: "#ddd", padding: "8px 9px", fontSize: "12px", fontFamily: "sans-serif" }}>
@@ -1714,6 +1887,23 @@ function DeepFrameDirectorPanel({ elements }) {
               <option value="dynamic">Dinamica</option>
             </select>
           </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: "5px", fontSize: "10px", color: "#777", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px" }}>
+            Checkpoint
+            <input value={config.model} onChange={(event) => updateConfig("model", event.target.value)} placeholder="dreamshaper_8.safetensors" style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "6px", color: "#bbb", padding: "8px 9px", fontSize: "12px", fontFamily: "monospace", textTransform: "none", letterSpacing: 0 }} />
+          </label>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "8px" }}>
+            {[
+              ["steps", "Steps", 10, 60],
+              ["cfg", "CFG", 1, 14],
+              ["width", "W", 256, 1536],
+              ["height", "H", 256, 1536],
+            ].map(([key, label, min, max]) => (
+              <label key={key} style={{ display: "flex", flexDirection: "column", gap: "5px", fontSize: "10px", color: "#777", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px" }}>
+                {label}
+                <input type="number" min={min} max={max} value={config[key]} onChange={(event) => updateConfig(key, Number(event.target.value))} style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "6px", color: "#ddd", padding: "7px 8px", fontSize: "12px", fontFamily: "monospace" }} />
+              </label>
+            ))}
+          </div>
           <label style={{ display: "flex", flexDirection: "column", gap: "5px", fontSize: "10px", color: "#777", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px" }}>
             Periodo / look
             <input value={config.period} onChange={(event) => updateConfig("period", event.target.value)} placeholder="es. Roma anni '60, thriller urbano..." style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "6px", color: "#bbb", padding: "8px 9px", fontSize: "12px", fontFamily: "sans-serif", textTransform: "none", letterSpacing: 0 }} />
@@ -1735,9 +1925,10 @@ function DeepFrameDirectorPanel({ elements }) {
             }}>
               <div style={{ display: "flex", gap: "7px", alignItems: "center", marginBottom: "4px" }}>
                 <span style={{ fontSize: "10px", color: "#c8a96e", fontFamily: "monospace" }}>SC.{shot.sceneNumber}</span>
-                <span style={{ fontSize: "10px", color: shot.status === "generated" ? "#64C878" : "#777", fontFamily: "sans-serif", marginLeft: "auto" }}>{shot.status === "generated" ? "GENERATA" : "DA FARE"}</span>
+                <span style={{ fontSize: "10px", color: shot.status === "generated" ? "#64C878" : shot.status === "generating" ? "#c8a96e" : shot.error ? "#FF8A80" : "#777", fontFamily: "sans-serif", marginLeft: "auto" }}>{shot.status === "generated" ? "GENERATA" : shot.status === "generating" ? "COMFYUI" : shot.error ? "ERRORE" : "DA FARE"}</span>
               </div>
               <div style={{ color: "#bbb", fontSize: "11px", fontFamily: "sans-serif", lineHeight: "1.35", overflowWrap: "anywhere" }}>{shot.heading}</div>
+              {shot.error && <div style={{ color: "#FF8A80", fontSize: "10px", fontFamily: "sans-serif", lineHeight: "1.35", marginTop: "5px" }}>{shot.error}</div>}
             </button>
           ))}
         </div>
@@ -1756,9 +1947,19 @@ function DeepFrameDirectorPanel({ elements }) {
                 </div>
                 <div style={{ color: "#f0ead8", fontFamily: "sans-serif", fontWeight: "bold", fontSize: "15px", lineHeight: "1.4" }}>{selectedShot.heading}</div>
                 {selectedShot.excerpt && <div style={{ color: "#999", fontFamily: "Georgia, serif", fontSize: "13px", lineHeight: "1.65" }}>{selectedShot.excerpt}</div>}
+                {selectedShot.promptId && (
+                  <div style={{ color: "#777", fontFamily: "monospace", fontSize: "10px", overflowWrap: "anywhere" }}>
+                    prompt_id: {selectedShot.promptId}
+                  </div>
+                )}
+                {selectedShot.error && (
+                  <div style={{ border: "1px solid rgba(255,107,107,.22)", background: "rgba(255,107,107,.06)", borderRadius: "6px", padding: "9px 10px", color: "#FF8A80", fontFamily: "sans-serif", fontSize: "12px", lineHeight: "1.45" }}>
+                    {selectedShot.error}
+                  </div>
+                )}
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <button onClick={() => markSceneGenerated(selectedShot.sceneNumber)} style={{ border: "1px solid rgba(100,200,120,.32)", background: "rgba(100,200,120,.09)", color: "#64C878", borderRadius: "6px", padding: "8px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
-                    Segna generata
+                  <button onClick={() => generateSceneWithComfy(selectedShot.sceneNumber)} disabled={selectedShot.status === "generating"} style={{ border: "1px solid rgba(100,200,120,.32)", background: "rgba(100,200,120,.09)", color: selectedShot.status === "generating" ? "#777" : "#64C878", borderRadius: "6px", padding: "8px 10px", fontSize: "11px", fontWeight: "bold", cursor: selectedShot.status === "generating" ? "default" : "pointer" }}>
+                    {selectedShot.status === "generating" ? "Generazione ComfyUI..." : selectedShot.status === "generated" ? "Rigenera via ComfyUI" : "Genera via ComfyUI"}
                   </button>
                   <button onClick={() => resetScene(selectedShot.sceneNumber)} style={{ border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.05)", color: "#aaa", borderRadius: "6px", padding: "8px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
                     Invalida scena
