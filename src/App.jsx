@@ -194,6 +194,19 @@ const DIRECTOR_STYLES = {
   },
 };
 
+const DEFAULT_DIRECTOR_CONFIG = {
+  style: "cinematic",
+  camera: "wide",
+  model: "sd_xl_base_1.0.safetensors",
+  steps: 28,
+  cfg: 7,
+  width: 768,
+  height: 432,
+  sampler: "euler",
+  scheduler: "normal",
+  period: "",
+};
+
 const PROCESS_STEPS = [
   {
     id: "parse",
@@ -1584,6 +1597,18 @@ const buildDirectorSidecar = ({ shots, config, comfyUrl }) => ({
   })),
 });
 
+const getDirectorProgress = ({ elements, config, shotStates }) => {
+  const scenes = Array.isArray(elements) ? extractDirectorScenes(elements) : [];
+  const shots = scenes.map((scene) => buildDirectorShot(scene, config, shotStates?.[scene.number]));
+  const generated = shots.filter((shot) => shot.status === "generated" && shot.imageUrl).length;
+  return {
+    total: shots.length,
+    generated,
+    pending: Math.max(shots.length - generated, 0),
+    complete: shots.length > 0 && generated === shots.length,
+  };
+};
+
 const buildComfyWorkflow = (shot, config) => ({
   "3": {
     class_type: "KSampler",
@@ -1769,24 +1794,18 @@ function DirectorFrame({ shot }) {
   );
 }
 
-function DeepFrameDirectorPanel({ elements }) {
+function DeepFrameDirectorPanel({
+  elements,
+  config,
+  setConfig,
+  comfyUrl,
+  setComfyUrl,
+  shotStates,
+  setShotStates,
+}) {
   const scenes = useMemo(() => extractDirectorScenes(elements), [elements]);
-  const [config, setConfig] = useState({
-    style: "cinematic",
-    camera: "wide",
-    model: "sd_xl_base_1.0.safetensors",
-    steps: 28,
-    cfg: 7,
-    width: 768,
-    height: 432,
-    sampler: "euler",
-    scheduler: "normal",
-    period: "",
-  });
-  const [comfyUrl, setComfyUrl] = useState("http://127.0.0.1:8188");
   const [comfyStatus, setComfyStatus] = useState({ state: "idle", message: "Non testato" });
   const [availableCheckpoints, setAvailableCheckpoints] = useState([]);
-  const [shotStates, setShotStates] = useState({});
   const [selectedSceneState, setSelectedScene] = useState(null);
   const shots = useMemo(() => scenes.map((scene) => (
     buildDirectorShot(scene, config, shotStates[scene.number])
@@ -2059,16 +2078,18 @@ const getProcessStepState = (stepId, data) => {
     characterSheets,
     breakdown,
     locationSheets,
+    directorProgress,
   } = data;
   const hasInput = rawText.trim().length > 0;
   const hasElements = Array.isArray(elements) && elements.length > 0;
   const hasAnalysisArtifacts = Boolean(analysis || characterSheets || breakdown || locationSheets);
+  const hasStoryboard = Boolean(directorProgress?.complete);
 
   if (stepId === "parse") return hasInput ? "done" : "active";
   if (stepId === "classify") return hasElements ? "done" : hasInput ? "active" : "idle";
   if (stepId === "format") return hasElements ? "done" : hasInput ? "active" : "idle";
   if (stepId === "analyze") return hasAnalysisArtifacts ? "done" : hasElements ? "active" : "idle";
-  if (stepId === "storyboard") return hasElements ? "active" : "idle";
+  if (stepId === "storyboard") return hasStoryboard ? "done" : hasElements ? "active" : "idle";
   if (stepId === "export") return hasElements ? "active" : "idle";
   return "idle";
 };
@@ -2129,9 +2150,16 @@ function DeepFrameProcessPanel({
   characterSheets,
   breakdown,
   locationSheets,
+  directorConfig,
+  directorShotStates,
   setActiveTab,
 }) {
-  const processData = { rawText, elements, analysis, characterSheets, breakdown, locationSheets };
+  const directorProgress = getDirectorProgress({
+    elements,
+    config: directorConfig,
+    shotStates: directorShotStates,
+  });
+  const processData = { rawText, elements, analysis, characterSheets, breakdown, locationSheets, directorProgress };
   const sceneCount = elements?.filter(isRealSceneHeading).length || 0;
   const dialogueCount = elements?.filter((element) => element.type === "dialogue").length || 0;
   const characterCount = elements ? new Set(elements.filter((element) => element.type === "character").map((element) => element.content)).size : 0;
@@ -2167,6 +2195,7 @@ function DeepFrameProcessPanel({
                 [`${characterCount}`, "personaggi"],
                 [`${dialogueCount}`, "battute"],
                 [`${readyReports.length}`, "report"],
+                [`${directorProgress.generated}/${directorProgress.total || 0}`, "frame"],
               ].map(([value, label]) => (
                 <div key={label} style={{ minWidth: "70px", border: "1px solid rgba(255,255,255,.08)", background: "rgba(0,0,0,.18)", borderRadius: "7px", padding: "7px 9px", textAlign: "center" }}>
                   <div style={{ color: "#c8a96e", fontSize: "16px", fontFamily: "sans-serif", fontWeight: "bold" }}>{value}</div>
@@ -2220,8 +2249,9 @@ function DeepFrameProcessPanel({
           <div style={{ color: "#bbb", fontFamily: "sans-serif", fontSize: "13px", lineHeight: "1.65" }}>
             {!rawText.trim() && "Carica un documento o scegli un template per iniziare il processo."}
             {rawText.trim() && !elements && "Il testo e pronto: avvia Parsing Conservativo o Formattazione Creativa per generare la sceneggiatura strutturata."}
-            {elements && !readyReports.length && "La sceneggiatura e formattata: puoi generare analisi, schede, breakdown, location o passare a Director per lo storyboard."}
-            {elements && readyReports.length > 0 && `Materiali gia pronti: ${readyReports.join(", ")}. Puoi continuare con Director o preparare gli export.`}
+            {elements && !readyReports.length && !directorProgress.complete && "La sceneggiatura e formattata: puoi generare analisi, schede, breakdown, location o passare a Director per lo storyboard."}
+            {elements && readyReports.length > 0 && !directorProgress.complete && `Materiali gia pronti: ${readyReports.join(", ")}. Puoi continuare con Director o preparare gli export.`}
+            {elements && directorProgress.complete && `Storyboard completato: ${directorProgress.generated} frame generati. Puoi rivedere Director o preparare gli export.`}
           </div>
         </section>
       </div>
@@ -4410,6 +4440,9 @@ export default function App() {
   const [lmStudioEndpoint, setLmStudioEndpoint] = useState(DEFAULT_LM_STUDIO_ENDPOINT);
   const [lmStudioModel, setLmStudioModel] = useState(DEFAULT_LM_STUDIO_MODEL);
   const [organicOptions, setOrganicOptions] = useState(DEFAULT_ORGANIC_OPTIONS);
+  const [directorConfig, setDirectorConfig] = useState(DEFAULT_DIRECTOR_CONFIG);
+  const [directorComfyUrl, setDirectorComfyUrl] = useState("http://127.0.0.1:8188");
+  const [directorShotStates, setDirectorShotStates] = useState({});
   const fileInputRef = useRef();
   const onboardingButtonRef = useRef();
   const dropzoneRef = useRef();
@@ -5479,13 +5512,23 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
                 characterSheets={characterSheets}
                 breakdown={breakdown}
                 locationSheets={locationSheets}
+                directorConfig={directorConfig}
+                directorShotStates={directorShotStates}
                 setActiveTab={setActiveTab}
               />
             )}
 
             {/* Tab: DeepFrame Director */}
             {!busy && elements && activeTab === "director" && (
-              <DeepFrameDirectorPanel elements={elements} />
+              <DeepFrameDirectorPanel
+                elements={elements}
+                config={directorConfig}
+                setConfig={setDirectorConfig}
+                comfyUrl={directorComfyUrl}
+                setComfyUrl={setDirectorComfyUrl}
+                shotStates={directorShotStates}
+                setShotStates={setDirectorShotStates}
+              />
             )}
             {!busy && !elements && activeTab === "director" && (
               <div style={{ flex: 1, display: "grid", placeItems: "center", padding: "24px", color: "#666", fontFamily: "sans-serif", textAlign: "center" }}>
