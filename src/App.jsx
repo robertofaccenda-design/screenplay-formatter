@@ -2008,7 +2008,7 @@ function DeepFrameDirectorPanel({
             </span>
           </label>
           <button onClick={exportSidecar} style={{ border: "1px solid rgba(79,195,247,.28)", background: "rgba(79,195,247,.08)", color: "#4FC3F7", borderRadius: "6px", padding: "8px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
-            Esporta sidecar JSON
+            Scarica pacchetto storyboard JSON
           </button>
         </div>
 
