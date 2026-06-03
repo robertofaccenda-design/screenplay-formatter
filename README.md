@@ -49,8 +49,130 @@ Moduli previsti:
 - Esporta in PDF anche schede personaggio, schede location e breakdown reparti
 - Integra Lumina Studio in una scheda **Luci 3D** per simulazioni di setup luce
 - Permette di scegliere tra AI Anthropic su Cloudflare e modello locale via LM Studio
+- Integra **DeepFrame Director / Storyboard** per generare prompt visivi da ogni scena
+- Si collega a **ComfyUI locale** per generare frame storyboard direttamente dalla sceneggiatura
+- Rileva automaticamente i checkpoint installati in ComfyUI
+- Mantiene in memoria i frame generati mentre si naviga tra Processo, Anteprima, Struttura e Director
+- Mostra lo stato dello storyboard nel tab **Processo** e lo completa quando tutte le scene hanno frame
+- Esporta un **pacchetto storyboard JSON** con scene, prompt, negative prompt, configurazione e stato frame
+- Include logo DeepFrame in header e favicon dell'app
+- Include un comando di stop per interrompere parsing o formattazione avviati accidentalmente
 
 ## Aggiornamenti Recenti
+
+### DeepFrame Director / Storyboard
+
+Il modulo **Director / Storyboard** trasforma le scene riconosciute in prompt visivi e consente di generare frame storyboard con ComfyUI.
+
+Funzioni principali:
+
+- tab **Director / Storyboard** disponibile quando la sceneggiatura contiene scene riconosciute;
+- estrazione automatica di scene, location, momento, azione e personaggi;
+- generazione di prompt ComfyUI per ogni scena;
+- negative prompt per ridurre immagini casuali, astratte, simboliche o non coerenti;
+- controlli per stile, camera, checkpoint, qualita, fedelta, larghezza, altezza e direzione visiva;
+- generazione singola scena o batch sequenziale;
+- anteprima del frame generato nella card scena;
+- persistenza dei frame quando si cambia tab;
+- reset della singola scena;
+- esportazione con pulsante **Scarica pacchetto storyboard JSON**.
+
+Il prompt Director e stato ottimizzato per SDXL/ComfyUI: e piu breve, letterale e orientato a soggetto, ambiente, azione visibile e props di scena. Questo perche modelli come Nano Banana interpretano meglio prompt narrativi lunghi, mentre SDXL base tende a produrre risultati piu coerenti con prompt visuali espliciti.
+
+### Integrazione ComfyUI Locale
+
+DeepFrame puo collegarsi a ComfyUI in locale sull'endpoint predefinito:
+
+```text
+http://127.0.0.1:8188
+```
+
+Il flusso usa un workflow ComfyUI base:
+
+- `CheckpointLoaderSimple`;
+- `CLIPTextEncode`;
+- `EmptyLatentImage`;
+- `KSampler`;
+- `VAEDecode`;
+- `SaveImage`.
+
+In sviluppo locale Vite usa il proxy:
+
+```text
+/comfyui
+```
+
+Questo evita problemi CORS e rimuove l'header `Origin` che alcune versioni di ComfyUI rifiutano con errore `403`.
+
+Funzioni tecniche aggiunte:
+
+- test connessione ComfyUI tramite `/system_stats`;
+- lettura checkpoint installati tramite `/object_info/CheckpointLoaderSimple`;
+- selezione checkpoint da lista reale invece che campo libero;
+- diagnostica piu chiara per errori workflow, nodi o modelli;
+- recupero immagini generate da `/history/{prompt_id}` e `/view`;
+- default checkpoint `sd_xl_base_1.0.safetensors`, quando presente.
+
+Nota: `sd_xl_base_1.0.safetensors` funziona, ma per maggiore coerenza cinematografica si consiglia un checkpoint SDXL piu realistico/cinematografico o un workflow con nodo cloud come Nano Banana Pro/Gemini, quando disponibile in ComfyUI.
+
+### Processo Di Creazione
+
+Il tab **Processo** mostra la pipeline completa:
+
+```text
+Parse -> Classifica -> Formatta -> Analizza -> Storyboard -> Export
+```
+
+La fase **Storyboard** si attiva quando la sceneggiatura ha scene riconosciute e passa a **Completato** quando tutti i frame sono stati generati nel modulo Director.
+
+Il pannello mostra anche il conteggio dei frame pronti, per esempio:
+
+```text
+2/2 frame
+```
+
+### Controllo Stop Parsing / Formattazione
+
+Durante:
+
+- **Parsing Conservativo**;
+- **Formattazione Creativa**;
+- **Rendi piu organica**;
+
+compare un pulsante di stop.
+
+Lo stop:
+
+- interrompe la richiesta AI tramite `AbortController`;
+- funziona sia con Anthropic/Worker sia con LM Studio locale;
+- impedisce di applicare risultati arrivati dopo l'interruzione;
+- mantiene invariata la sceneggiatura precedente.
+
+### UI Director Piu Comprensibile
+
+I controlli tecnici sono stati rinominati per renderli piu chiari:
+
+| Prima | Ora | Significato |
+| --- | --- | --- |
+| Steps | Qualita | Numero di passaggi generativi / dettaglio |
+| CFG | Fedelta | Aderenza al prompt |
+| W | Larghezza | Larghezza frame in pixel |
+| H | Altezza | Altezza frame in pixel |
+| Periodo / look | Direzione visiva | Epoca, atmosfera, luce, costumi o riferimento cinematografico |
+
+Esempio di direzione visiva:
+
+```text
+antica Roma imperiale, luce naturale, costumi realistici
+```
+
+### Identita Visiva
+
+Sono stati aggiunti:
+
+- favicon DeepFrame;
+- icona DeepFrame nell'header accanto a **DeepFrame Script**;
+- titolo pagina browser aggiornato a **DeepFrame**.
 
 ### Supporto PDF In Input
 
@@ -133,9 +255,16 @@ Quando si usa LM Studio locale, DeepFrame applica alcune protezioni per evitare 
 - Analisi Drammaturgica su script lunghi viene divisa in blocchi di scene;
 - ogni blocco di analisi ha un timeout;
 - se LM Studio restituisce JSON non valido, DeepFrame usa un fallback locale per mantenere attiva la dashboard;
+- le segnalazioni tecniche ripetute dei fallback LM Studio vengono deduplicate per evitare messaggi identici nella dashboard;
 - le Schede Personaggio hanno un fallback locale basato su personaggi, scene e battute riconosciute.
 
 I fallback locali non sostituiscono una vera analisi AI completa, ma impediscono al workflow di bloccarsi quando il modello locale è lento, instabile o poco affidabile nel JSON.
+
+### Riapertura Risultati Gia Generati
+
+Se Analisi Drammaturgica, Schede Personaggio, Schede Location o Breakdown Reparti sono gia stati generati nella sessione corrente, un nuovo click sul relativo pulsante non rilancia l'AI.
+
+DeepFrame apre direttamente il risultato esistente e aggiorna l'etichetta del comando in modalita **Apri**, evitando richieste duplicate a LM Studio o Anthropic.
 
 ### Breakdown Reparti
 
@@ -155,6 +284,7 @@ Il **Piano di lavoro** ora permette:
 - accorpamento per complessita produttiva;
 - spostamento manuale delle scene tra giornate;
 - aggiunta, eliminazione e riordino delle giornate;
+- eliminazione automatica delle giornate rimaste vuote dopo lo spostamento o la rimozione delle scene;
 - legenda cast numerata;
 - vista tipo shooting schedule con colonne `Sc.`, `Set`, `I/E`, `Cast ID`, `Shoot location`, `Pages`, `Complessita`;
 - stima in ottavi di pagina;
@@ -284,6 +414,9 @@ https://lumina-studio-1033723633880.us-west1.run.app/
 - Backend: Cloudflare Worker
 - Hosting: Cloudflare Workers Static Assets
 - AI provider: Anthropic Claude / LM Studio locale OpenAI-compatible
+- Generazione immagini storyboard: ComfyUI locale
+- Proxy sviluppo locale: Vite `/lmstudio` e `/comfyui`
+- Favicon/logo: `public/deepframe-favicon.png`
 
 ## Formati Supportati
 
@@ -304,6 +437,7 @@ Output:
 | `.html` | Visualizzazione, stampa o conversione PDF |
 | PDF sceneggiatura | Stampa continua o una scena per pagina |
 | PDF report | Schede personaggio, schede location, breakdown reparti |
+| Pacchetto storyboard JSON | Prompt, scene, configurazione Director e stato frame |
 
 ## Configurazione Cloudflare
 
@@ -371,6 +505,44 @@ Note operative:
 - abilita il server locale OpenAI-compatible;
 - in sviluppo locale l'app usa il proxy Vite `/lmstudio` per evitare problemi CORS;
 - se usi la versione pubblicata su Cloudflare, la chiamata parte dal browser verso il tuo `localhost`, non dal Worker.
+
+## ComfyUI Locale Per Storyboard
+
+Per usare **Director / Storyboard** con generazione immagini:
+
+1. Installa e avvia ComfyUI.
+2. Assicurati che ComfyUI sia in ascolto su:
+
+```text
+http://127.0.0.1:8188
+```
+
+3. Installa almeno un checkpoint in:
+
+```text
+ComfyUI/models/checkpoints/
+```
+
+4. Avvia DeepFrame in locale con Vite:
+
+```bash
+npm run dev
+```
+
+5. Apri **Director / Storyboard** e premi il test connessione.
+
+DeepFrame legge automaticamente i checkpoint disponibili e mostra una lista selezionabile. Se non vedi il checkpoint, riavvia ComfyUI e ripeti il test connessione.
+
+Parametri consigliati per SDXL base:
+
+| Campo UI | Valore rapido | Valore migliore |
+| --- | --- | --- |
+| Qualita | 28 | 30-36 |
+| Fedelta | 7 | 7-8.5 |
+| Larghezza | 768 | 1024 |
+| Altezza | 432 | 576 |
+
+Nota: ComfyUI/SDXL base e meno bravo di modelli cloud come Nano Banana Pro nel comprendere prompt narrativi lunghi. Per questo DeepFrame genera prompt piu letterali e visuali per ComfyUI.
 
 ## Sviluppo Locale
 
