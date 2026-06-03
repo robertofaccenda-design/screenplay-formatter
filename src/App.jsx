@@ -5320,7 +5320,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
               {characterSheets && tabBtn("schede", "Schede", activeTab === "schede")}
               {breakdown && tabBtn("breakdown", "Breakdown", activeTab === "breakdown")}
               {locationSheets && tabBtn("locations", "Location", activeTab === "locations")}
-              {elements && tabBtn("director", "Director", activeTab === "director")}
+              {tabBtn("director", "Director / Storyboard", activeTab === "director")}
             {tabBtn("lumina", "Luci 3D", activeTab === "lumina")}
           </div>
 
@@ -5425,6 +5425,17 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
             {/* Tab: DeepFrame Director */}
             {!busy && elements && activeTab === "director" && (
               <DeepFrameDirectorPanel elements={elements} />
+            )}
+            {!busy && !elements && activeTab === "director" && (
+              <div style={{ flex: 1, display: "grid", placeItems: "center", padding: "24px", color: "#666", fontFamily: "sans-serif", textAlign: "center" }}>
+                <div>
+                  <div style={{ fontSize: "42px", marginBottom: "12px" }}>FRM</div>
+                  <div style={{ color: "#c8a96e", fontSize: "16px", fontWeight: "bold", marginBottom: "8px" }}>Director / Storyboard</div>
+                  <div style={{ maxWidth: "420px", lineHeight: "1.6", fontSize: "13px" }}>
+                    Carica o incolla una sceneggiatura, poi avvia Parsing Conservativo o Formattazione Creativa. Quando le scene sono riconosciute, qui compariranno prompt ComfyUI e generazione frame.
+                  </div>
+                </div>
+              </div>
             )}
 
             {/* Tab: Anteprima */}
