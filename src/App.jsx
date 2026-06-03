@@ -175,22 +175,22 @@ const DIRECTOR_STYLES = {
   cinematic: {
     label: "Cinematografico",
     suffix: "cinematic composition, naturalistic lighting, production still, 35mm lens, subtle film grain",
-    negative: "flat lighting, amateur framing, distorted faces, unreadable scene, low detail",
+    negative: "wrong subject, unrelated image, abstract image, symbolic image, random objects, text, subtitles, watermark, logo, flat lighting, amateur framing, distorted faces, unreadable scene, low detail",
   },
   noir: {
     label: "Noir",
     suffix: "high contrast noir lighting, deep shadows, smoke, expressive silhouettes, dramatic black and amber palette",
-    negative: "bright sitcom lighting, saturated cartoon colors, clean corporate look, weak shadows",
+    negative: "wrong subject, unrelated image, abstract image, symbolic image, random objects, text, subtitles, watermark, logo, bright sitcom lighting, saturated cartoon colors, clean corporate look, weak shadows",
   },
   realism: {
     label: "Fotorealistico",
     suffix: "photorealistic film still, accurate location texture, natural skin, believable props, balanced depth of field",
-    negative: "plastic skin, fantasy costume, overprocessed HDR, unrealistic anatomy, cluttered frame",
+    negative: "wrong subject, unrelated image, abstract image, symbolic image, random objects, text, subtitles, watermark, logo, plastic skin, fantasy costume, overprocessed HDR, unrealistic anatomy, cluttered frame",
   },
   storyboard: {
     label: "Storyboard B/N",
     suffix: "black and white storyboard frame, clear blocking, pencil texture, cinematic shot planning",
-    negative: "finished glossy render, color illustration, messy sketch, unreadable layout",
+    negative: "wrong subject, unrelated image, abstract image, symbolic image, random objects, text, subtitles, watermark, logo, finished glossy render, color illustration, messy sketch, unreadable layout",
   },
 };
 
@@ -1482,6 +1482,15 @@ const getSceneExcerpt = (scene) => (
   scene.actions.join(" ").replace(/\s+/g, " ").trim().slice(0, 420)
 );
 
+const cleanVisualPromptText = (value, maxLength = 240) => (
+  String(value || "")
+    .replace(/[“”]/g, '"')
+    .replace(/[’]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength)
+);
+
 const extractDirectorScenes = (elements = []) => {
   const scenes = [];
   let current = null;
@@ -1535,17 +1544,27 @@ const extractDirectorScenes = (elements = []) => {
 
 const buildDirectorPrompt = (scene, config) => {
   const style = DIRECTOR_STYLES[config.style] || DIRECTOR_STYLES.cinematic;
-  const cast = scene.characters.length ? `characters: ${scene.characters.join(", ")}` : "no clearly identified speaking characters";
+  const cast = scene.characters.length ? `visible characters: ${scene.characters.join(", ")}` : "no clearly identified speaking characters";
   const camera = config.camera === "wide" ? "wide establishing shot"
     : config.camera === "medium" ? "medium shot"
       : config.camera === "close" ? "close-up with emotional detail"
         : "dynamic director's view";
-  const period = config.period.trim() ? `period and production design: ${config.period.trim()}` : "contemporary production design unless the screenplay implies otherwise";
+  const environment = scene.meta.internoEsterno === "INT" ? "interior" : "exterior";
+  const location = cleanVisualPromptText(scene.meta.location, 120);
+  const time = cleanVisualPromptText(scene.meta.momento.toLowerCase(), 60);
+  const action = cleanVisualPromptText(scene.excerpt || scene.heading, 260);
+  const period = config.period.trim()
+    ? `visual direction and production design: ${cleanVisualPromptText(config.period, 180)}`
+    : "production design must follow the screenplay setting";
   return [
-    `${camera}, ${scene.meta.internoEsterno} ${scene.meta.location}, ${scene.meta.momento.toLowerCase()}`,
+    "literal cinematic film still of this exact screenplay scene",
+    "not abstract, not symbolic, no text in image",
+    `shot: ${camera}`,
+    `setting: ${environment}, ${location}, ${time}`,
     cast,
-    `scene action: ${scene.excerpt || scene.heading}`,
+    `main visible action: ${action}`,
     period,
+    "clear subject, coherent location, readable composition, scene-accurate props",
     style.suffix,
   ].join(", ");
 };
@@ -2051,6 +2070,9 @@ function DeepFrameDirectorPanel({
             <section style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               <div style={{ background: "rgba(200,169,110,.055)", border: "1px solid rgba(200,169,110,.18)", borderRadius: "8px", padding: "14px 16px" }}>
                 <div style={{ color: "#c8a96e", fontFamily: "sans-serif", fontSize: "10px", textTransform: "uppercase", letterSpacing: "1px", fontWeight: "bold", marginBottom: "8px" }}>Prompt ComfyUI</div>
+                <div style={{ color: "#7d776a", fontFamily: "sans-serif", fontSize: "11px", lineHeight: "1.45", marginBottom: "8px" }}>
+                  Ottimizzato per SDXL: breve, letterale, con soggetto e azione espliciti.
+                </div>
                 <div style={{ color: "#ddd", fontFamily: "monospace", fontSize: "12px", lineHeight: "1.65", overflowWrap: "anywhere" }}>{selectedShot.prompt}</div>
               </div>
               <div style={{ background: "rgba(255,255,255,.025)", border: "1px solid rgba(255,255,255,.07)", borderRadius: "8px", padding: "14px 16px" }}>
