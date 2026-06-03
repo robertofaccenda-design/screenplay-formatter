@@ -1677,19 +1677,32 @@ const submitComfyWorkflow = async ({ comfyUrl, shot, config }) => {
     throw new Error("Il sito HTTPS non puo chiamare ComfyUI in HTTP locale. Avvia DeepFrame in locale oppure usa un tunnel HTTPS verso ComfyUI.");
   }
 
+  const workflow = buildComfyWorkflow(shot, config);
   const clientId = `deepframe-${crypto.randomUUID?.() || Date.now()}`;
   const promptResponse = await fetch(`${baseUrl}/prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       client_id: clientId,
-      prompt: buildComfyWorkflow(shot, config),
+      prompt: workflow,
     }),
   });
-  const promptPayload = await promptResponse.json().catch(() => ({}));
-  if (!promptResponse.ok) {
-    const nodeErrors = promptPayload?.node_errors ? JSON.stringify(promptPayload.node_errors) : "";
-    throw new Error(promptPayload?.error?.message || promptPayload?.error || nodeErrors || "ComfyUI ha rifiutato il workflow. Controlla modello e nodi.");
+  const promptText = await promptResponse.text();
+  let promptPayload = {};
+  try {
+    promptPayload = promptText ? JSON.parse(promptText) : {};
+  } catch {
+    promptPayload = {};
+  }
+  const nodeErrors = promptPayload?.node_errors && Object.keys(promptPayload.node_errors).length
+    ? JSON.stringify(promptPayload.node_errors)
+    : "";
+  if (!promptResponse.ok || nodeErrors) {
+    const errorDetail = typeof promptPayload?.error === "string"
+      ? promptPayload.error
+      : promptPayload?.error?.message;
+    const rawDetail = promptText && promptText.length < 1200 ? promptText : "";
+    throw new Error(errorDetail || nodeErrors || rawDetail || `ComfyUI ha rifiutato il workflow (${promptResponse.status}).`);
   }
   const promptId = promptPayload.prompt_id;
   if (!promptId) throw new Error("ComfyUI non ha restituito un prompt_id.");
@@ -1816,17 +1829,18 @@ function DeepFrameDirectorPanel({ elements }) {
   const generateSceneWithComfy = async (sceneNumber) => {
     const shot = shots.find((item) => item.sceneNumber === sceneNumber);
     if (!shot || shot.status === "generating") return;
-    if (availableCheckpoints.length > 0 && !availableCheckpoints.includes(config.model)) {
-      const nextModel = availableCheckpoints[0];
-      updateConfig("model", nextModel);
-      const message = `Checkpoint non valido. Ho selezionato ${nextModel}: premi di nuovo Genera.`;
-      saveShotState(sceneNumber, { ...shot, status: "ready", error: message });
-      setComfyStatus({ state: "error", message });
-      return;
-    }
+    let runConfig = config;
     saveShotState(sceneNumber, { ...shot, status: "generating", error: "" });
     try {
-      const result = await submitComfyWorkflow({ comfyUrl, shot, config });
+      const checkpoints = await fetchComfyCheckpoints(getComfyRequestBaseUrl(comfyUrl));
+      if (checkpoints.length > 0) {
+        setAvailableCheckpoints(checkpoints);
+        if (!checkpoints.includes(runConfig.model)) {
+          runConfig = { ...runConfig, model: checkpoints[0] };
+          updateConfig("model", checkpoints[0]);
+        }
+      }
+      const result = await submitComfyWorkflow({ comfyUrl, shot, config: runConfig });
       saveShotState(sceneNumber, {
         ...shot,
         status: "generated",
