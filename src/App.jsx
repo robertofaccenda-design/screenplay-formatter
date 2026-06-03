@@ -1554,6 +1554,10 @@ const buildDirectorShot = (scene, config, previousShot) => {
     status: previousShot?.signature === scene.signature && previousShot?.prompt === prompt ? previousShot.status : "ready",
     frameSeed: previousShot?.signature === scene.signature ? previousShot.frameSeed : hashText(`${scene.signature}-${prompt}`),
     generatedAt: previousShot?.signature === scene.signature ? previousShot.generatedAt : null,
+    promptId: previousShot?.signature === scene.signature ? previousShot.promptId : null,
+    comfyImage: previousShot?.signature === scene.signature ? previousShot.comfyImage : null,
+    imageUrl: previousShot?.signature === scene.signature ? previousShot.imageUrl : null,
+    error: previousShot?.signature === scene.signature ? previousShot.error : "",
   };
 };
 
