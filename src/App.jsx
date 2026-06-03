@@ -1950,20 +1950,24 @@ function DeepFrameDirectorPanel({ elements }) {
           </label>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "8px" }}>
             {[
-              ["steps", "Steps", 10, 60],
-              ["cfg", "CFG", 1, 14],
-              ["width", "W", 256, 1536],
-              ["height", "H", 256, 1536],
-            ].map(([key, label, min, max]) => (
+              ["steps", "Qualita", "Dettaglio", 10, 60],
+              ["cfg", "Fedelta", "Aderenza al prompt", 1, 14],
+              ["width", "Larghezza", "Pixel frame", 256, 1536],
+              ["height", "Altezza", "Pixel frame", 256, 1536],
+            ].map(([key, label, helper, min, max]) => (
               <label key={key} style={{ display: "flex", flexDirection: "column", gap: "5px", fontSize: "10px", color: "#777", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px" }}>
                 {label}
                 <input type="number" min={min} max={max} value={config[key]} onChange={(event) => updateConfig(key, Number(event.target.value))} style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "6px", color: "#ddd", padding: "7px 8px", fontSize: "12px", fontFamily: "monospace" }} />
+                <span style={{ color: "#5f626b", fontSize: "9px", lineHeight: 1.3, textTransform: "none", letterSpacing: 0 }}>{helper}</span>
               </label>
             ))}
           </div>
           <label style={{ display: "flex", flexDirection: "column", gap: "5px", fontSize: "10px", color: "#777", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px" }}>
-            Periodo / look
-            <input value={config.period} onChange={(event) => updateConfig("period", event.target.value)} placeholder="es. Roma anni '60, thriller urbano..." style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "6px", color: "#bbb", padding: "8px 9px", fontSize: "12px", fontFamily: "sans-serif", textTransform: "none", letterSpacing: 0 }} />
+            Direzione visiva
+            <input value={config.period} onChange={(event) => updateConfig("period", event.target.value)} placeholder="es. antica Roma imperiale, luce naturale, costumi realistici" style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "6px", color: "#bbb", padding: "8px 9px", fontSize: "12px", fontFamily: "sans-serif", textTransform: "none", letterSpacing: 0 }} />
+            <span style={{ color: "#5f626b", fontSize: "9px", lineHeight: 1.35, textTransform: "none", letterSpacing: 0 }}>
+              Una frase breve su epoca, atmosfera, luce, costumi o riferimento cinematografico.
+            </span>
           </label>
           <button onClick={exportSidecar} style={{ border: "1px solid rgba(79,195,247,.28)", background: "rgba(79,195,247,.08)", color: "#4FC3F7", borderRadius: "6px", padding: "8px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
             Esporta sidecar JSON
