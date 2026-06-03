@@ -5095,7 +5095,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
   const s = {
     app:        { minHeight: "100vh", background: "linear-gradient(135deg,#0a0a0f,#111118,#0d0d15)", color: "#e8e8f0", fontFamily: "Georgia,serif", display: "flex", flexDirection: "column" },
     header:     { padding: "28px 40px 20px", borderBottom: "1px solid rgba(255,255,255,.08)", display: "flex", alignItems: "center", gap: "16px" },
-    logo:       { width: "36px", height: "36px", background: "linear-gradient(135deg,#c8a96e,#e8c98e)", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px", flexShrink: 0 },
+    logo:       { width: "36px", height: "36px", borderRadius: "6px", objectFit: "cover", flexShrink: 0, boxShadow: "0 0 0 1px rgba(200,169,110,.28)" },
     headerActions: { marginLeft: "auto", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" },
     storyLink:  { background: "rgba(78,195,247,.12)", color: "#9adfff", border: "1px solid rgba(78,195,247,.35)", borderRadius: "8px", padding: "10px 14px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", fontFamily: "sans-serif", textDecoration: "none", whiteSpace: "nowrap" },
     homeActions: { display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center", marginTop: "8px" },
@@ -5153,7 +5153,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
     <div style={s.app}>
       {/* HEADER */}
       <div style={s.header}>
-        <div style={s.logo}>DF</div>
+        <img src="/deepframe-favicon.png" alt="DeepFrame" style={s.logo} />
         <div>
           <div style={{ fontSize: "20px", fontWeight: "bold", letterSpacing: ".5px", color: "#f0ead8" }}>DeepFrame Script</div>
           <div style={{ fontSize: "12px", color: "#888", marginTop: "2px", fontFamily: "sans-serif", letterSpacing: "1px", textTransform: "uppercase" }}>Beyond Screenwriting · Script · Analisi · Produzione</div>
