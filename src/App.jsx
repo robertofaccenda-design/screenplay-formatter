@@ -4449,6 +4449,7 @@ export default function App() {
   const apiKeyBoxRef = useRef();
   const rawTextBoxRef = useRef();
   const formatButtonRef = useRef();
+  const formatterAbortRef = useRef(null);
   const tourTargets = useMemo(() => ({
     onboarding: onboardingButtonRef,
     dropzone: dropzoneRef,
@@ -4555,7 +4556,7 @@ export default function App() {
 
   const isLocalAi = aiProvider === "lmstudio";
 
-  const runLocalLmStudio = async ({ system, user, temperature = 0.1, output = "object", timeoutMs = LOCAL_LM_STUDIO_TIMEOUT_MS }) => {
+  const runLocalLmStudio = async ({ system, user, temperature = 0.1, output = "object", timeoutMs = LOCAL_LM_STUDIO_TIMEOUT_MS, signal }) => {
     const endpoint = lmStudioEndpoint.trim() || DEFAULT_LM_STUDIO_ENDPOINT;
     const model = lmStudioModel.trim() || DEFAULT_LM_STUDIO_MODEL;
     const buildBody = (messages, temp = temperature, useJsonMode = true) => ({
@@ -4567,7 +4568,10 @@ export default function App() {
     });
     const sendRequest = async (messages, temp = temperature, useJsonMode = true) => {
       const controller = new AbortController();
+      const abortFromParent = () => controller.abort();
       const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+      if (signal?.aborted) controller.abort();
+      signal?.addEventListener("abort", abortFromParent, { once: true });
       try {
         const res = await fetch(endpoint, {
           method: "POST",
@@ -4579,11 +4583,13 @@ export default function App() {
         return { res, payload };
       } catch (error) {
         if (error?.name === "AbortError") {
+          if (signal?.aborted) throw error;
           throw new Error(`LM Studio ha impiegato più di ${Math.round(timeoutMs / 1000)} secondi per rispondere.`);
         }
         throw error;
       } finally {
         window.clearTimeout(timeoutId);
+        signal?.removeEventListener("abort", abortFromParent);
       }
     };
     let response;
@@ -4600,6 +4606,7 @@ export default function App() {
         ], temperature, false));
       }
     } catch (error) {
+      if (error?.name === "AbortError") throw error;
       if (error?.message?.includes("LM Studio ha impiegato")) throw error;
       throw new Error(
         "Non riesco a raggiungere LM Studio. Avvia il server locale OpenAI-compatible, controlla la porta 1234 e, se usi il sito pubblicato, abilita CORS in LM Studio."
@@ -4638,12 +4645,13 @@ export default function App() {
     }
   };
 
-  const postAiJson = async (url, payload, localConfig) => {
+  const postAiJson = async (url, payload, localConfig = {}) => {
     if (isLocalAi) return await runLocalLmStudio(localConfig);
     const response = await fetch(url, {
       method: "POST",
       headers: apiHeaders(),
       body: JSON.stringify(payload),
+      signal: localConfig.signal,
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Errore server");
@@ -4705,7 +4713,11 @@ export default function App() {
 
   const runFormatter = async (mode = "creative") => {
     if (!rawText.trim()) return;
-    setLoading(true); setError(""); setElements(null); setAnalysis(null); setCharacterSheets(null); setBreakdown(null); setLocationSheets(null);
+    formatterAbortRef.current?.abort();
+    const controller = new AbortController();
+    formatterAbortRef.current = controller;
+    setLoading(true);
+    setError("");
     try {
       const organicInstructions = buildOrganicInstructions(organicOptions);
       const modeLabel = mode === "conservative"
@@ -4716,6 +4728,7 @@ export default function App() {
 
       setLoadingMsg(`${modeLabel} in corso...`);
       const formatChunk = async (text, index = 0, total = 1) => {
+        if (controller.signal.aborted) throw new DOMException("Operazione interrotta", "AbortError");
         if (isLocalAi && total > 1) {
           setLoadingMsg(`${modeLabel} con LM Studio: blocco ${index + 1}/${total}...`);
         }
@@ -4728,14 +4741,17 @@ export default function App() {
             : `Adatta ed espandi creativamente il seguente frammento in sceneggiatura cinematografica professionale. Aggiungi materiale nuovo coerente: azioni, dialoghi, dettagli visivi, tensione e raccordi. Restituisci solo gli elementi della sceneggiatura generati da questo frammento, senza spiegazioni:\n\n${text}`,
           temperature: mode === "conservative" ? 0 : mode === "organic" ? 0.72 : 0.65,
           output: "array",
+          signal: controller.signal,
         });
         return normalizeElementsPayload(data, isLocalAi);
       };
 
       const formatChunkAdaptive = async (text, index = 0, total = 1, depth = 0) => {
+        if (controller.signal.aborted) throw new DOMException("Operazione interrotta", "AbortError");
         try {
           return await formatChunk(text, index, total);
         } catch (error) {
+          if (error?.name === "AbortError") throw error;
           if (!isLocalAi || text.length <= LOCAL_FORMAT_MIN_RETRY_CHARS || depth >= 3) {
             throw error;
           }
@@ -4753,6 +4769,7 @@ export default function App() {
       const chunks = isLocalAi ? splitTextForLocalFormatting(rawText) : [rawText];
       const formattedChunks = [];
       for (let index = 0; index < chunks.length; index += 1) {
+        if (controller.signal.aborted) throw new DOMException("Operazione interrotta", "AbortError");
         formattedChunks.push(...await formatChunkAdaptive(chunks[index], index, chunks.length));
       }
 
@@ -4760,13 +4777,30 @@ export default function App() {
         throw new Error("La formattazione non ha prodotto elementi validi.");
       }
 
+      if (controller.signal.aborted) throw new DOMException("Operazione interrotta", "AbortError");
       setElements(formattedChunks);
+      setAnalysis(null);
+      setCharacterSheets(null);
+      setBreakdown(null);
+      setLocationSheets(null);
       setActiveTab("preview");
     } catch (e) {
-      setError("Errore: " + e.message);
+      if (e?.name === "AbortError") {
+        setError("Operazione interrotta. La sceneggiatura precedente e rimasta invariata.");
+      } else {
+        setError("Errore: " + e.message);
+      }
     } finally {
+      if (formatterAbortRef.current === controller) formatterAbortRef.current = null;
       setLoading(false); setLoadingMsg("");
     }
+  };
+
+  const stopFormatter = () => {
+    formatterAbortRef.current?.abort();
+    setLoading(false);
+    setLoadingMsg("");
+    setError("Operazione interrotta. La sceneggiatura precedente e rimasta invariata.");
   };
 
   const runAnalysis = async () => {
@@ -5051,6 +5085,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
     keyInput:   { width: "100%", background: "rgba(0,0,0,.22)", border: "1px solid rgba(255,255,255,.12)", borderRadius: "6px", color: "#ddd", fontFamily: "monospace", fontSize: "12px", padding: "10px", boxSizing: "border-box" },
     btn:        { background: "linear-gradient(135deg,#c8a96e,#b8994e)", color: "#0a0a0f", border: "none", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canFormat ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canFormat ? 1 : 0.4 },
     btnConservative: { background: canFormat ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.03)", color: canFormat ? "#e8e8f0" : "#777", border: "1px solid rgba(255,255,255,.14)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canFormat ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canFormat ? 1 : 0.45 },
+    btnStop: { background: "rgba(255,107,107,.12)", color: "#ffb4ae", border: "1px solid rgba(255,107,107,.38)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", width: "100%", fontFamily: "sans-serif" },
     btnDirectImport: { background: canImportDirect ? "rgba(165,214,167,.1)" : "rgba(165,214,167,.04)", color: canImportDirect ? "#b8e6ba" : "#6e8d70", border: "1px solid rgba(165,214,167,.28)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canImportDirect ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canImportDirect ? 1 : 0.5 },
     btnOrganic: { background: canFormat ? "linear-gradient(135deg,#4FC3F7,#087EA4)" : "rgba(79,195,247,.12)", color: canFormat ? "#041016" : "#4FC3F7", border: "1px solid rgba(79,195,247,.42)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canFormat ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canFormat ? 1 : 0.5 },
     btnAnalyze: { background: canAnalyze ? "linear-gradient(135deg,#7C4DFF,#651FFF)" : "rgba(124,77,255,.15)", color: canAnalyze ? "#fff" : "#7C4DFF", border: "1px solid rgba(124,77,255,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canAnalyze ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canAnalyze ? 1 : 0.5 },
@@ -5290,6 +5325,11 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
             <button style={s.btn} disabled={!canFormat} onClick={() => runFormatter("creative")}>
               {loading ? "Formattazione in corso..." : "Formattazione Creativa"}
             </button>
+            {loading && (
+              <button type="button" style={s.btnStop} onClick={stopFormatter}>
+                Ferma parsing / formattazione
+              </button>
+            )}
             <div style={s.organicPanel}>
               <div style={s.label}>Intervento creativo</div>
               <select
@@ -5445,6 +5485,9 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
                 <div style={{ width: "40px", height: "40px", border: "3px solid rgba(200,169,110,.2)", borderTop: "3px solid #c8a96e", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
                 <div style={{ fontFamily: "sans-serif", color: "#888", fontSize: "14px" }}>{loadingMsg}</div>
                 <div style={{ fontFamily: "monospace", color: "#555", fontSize: "11px" }}>Analisi struttura drammaturgica...</div>
+                <button type="button" style={{ ...s.btnStop, maxWidth: "260px" }} onClick={stopFormatter}>
+                  Ferma operazione
+                </button>
               </div>
             )}
 
