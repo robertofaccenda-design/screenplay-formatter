@@ -1641,6 +1641,11 @@ const buildComfyWorkflow = (shot, config) => ({
 });
 
 const normalizeComfyUrl = (url) => String(url || "").trim().replace(/\/+$/, "");
+const isLocalDeepFrameHost = () => ["localhost", "127.0.0.1"].includes(window.location.hostname);
+const isLocalComfyUrl = (url) => /^https?:\/\/(?:127\.0\.0\.1|localhost):8188(?:\/)?$/i.test(normalizeComfyUrl(url));
+const getComfyRequestBaseUrl = (url) => (
+  isLocalDeepFrameHost() && isLocalComfyUrl(url) ? "/comfyui" : normalizeComfyUrl(url)
+);
 
 const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
@@ -1658,7 +1663,7 @@ const getComfyImageUrl = (baseUrl, image) => {
 };
 
 const submitComfyWorkflow = async ({ comfyUrl, shot, config }) => {
-  const baseUrl = normalizeComfyUrl(comfyUrl);
+  const baseUrl = getComfyRequestBaseUrl(comfyUrl);
   if (!baseUrl) throw new Error("Inserisci l'URL del server ComfyUI.");
   if (window.location.protocol === "https:" && baseUrl.startsWith("http://")) {
     throw new Error("Il sito HTTPS non puo chiamare ComfyUI in HTTP locale. Avvia DeepFrame in locale oppure usa un tunnel HTTPS verso ComfyUI.");
@@ -1779,7 +1784,7 @@ function DeepFrameDirectorPanel({ elements }) {
   };
 
   const testComfyConnection = async () => {
-    const baseUrl = normalizeComfyUrl(comfyUrl);
+    const baseUrl = getComfyRequestBaseUrl(comfyUrl);
     setComfyStatus({ state: "checking", message: "Test connessione..." });
     try {
       if (window.location.protocol === "https:" && baseUrl.startsWith("http://")) {
