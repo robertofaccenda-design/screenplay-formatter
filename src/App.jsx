@@ -1599,7 +1599,7 @@ const buildComfyWorkflow = (shot, config) => ({
   "4": {
     class_type: "CheckpointLoaderSimple",
     inputs: {
-      ckpt_name: config.model || "dreamshaper_8.safetensors",
+      ckpt_name: config.model || "sd_xl_base_1.0.safetensors",
     },
   },
   "5": {
@@ -1748,7 +1748,7 @@ function DeepFrameDirectorPanel({ elements }) {
   const [config, setConfig] = useState({
     style: "cinematic",
     camera: "wide",
-    model: "cinematicVision_v1.safetensors",
+    model: "sd_xl_base_1.0.safetensors",
     steps: 28,
     cfg: 7,
     width: 768,
@@ -1894,7 +1894,7 @@ function DeepFrameDirectorPanel({ elements }) {
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: "5px", fontSize: "10px", color: "#777", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px" }}>
             Checkpoint
-            <input value={config.model} onChange={(event) => updateConfig("model", event.target.value)} placeholder="dreamshaper_8.safetensors" style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "6px", color: "#bbb", padding: "8px 9px", fontSize: "12px", fontFamily: "monospace", textTransform: "none", letterSpacing: 0 }} />
+            <input value={config.model} onChange={(event) => updateConfig("model", event.target.value)} placeholder="sd_xl_base_1.0.safetensors" style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "6px", color: "#bbb", padding: "8px 9px", fontSize: "12px", fontFamily: "monospace", textTransform: "none", letterSpacing: 0 }} />
           </label>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "8px" }}>
             {[
