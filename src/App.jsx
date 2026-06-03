@@ -1662,6 +1662,14 @@ const getComfyImageUrl = (baseUrl, image) => {
   return `${baseUrl}/view?${params.toString()}`;
 };
 
+const fetchComfyCheckpoints = async (baseUrl) => {
+  const response = await fetch(`${baseUrl}/object_info/CheckpointLoaderSimple`);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error("Non riesco a leggere i checkpoint da ComfyUI.");
+  const choices = payload?.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0];
+  return Array.isArray(choices) ? choices : [];
+};
+
 const submitComfyWorkflow = async ({ comfyUrl, shot, config }) => {
   const baseUrl = getComfyRequestBaseUrl(comfyUrl);
   if (!baseUrl) throw new Error("Inserisci l'URL del server ComfyUI.");
@@ -1680,7 +1688,8 @@ const submitComfyWorkflow = async ({ comfyUrl, shot, config }) => {
   });
   const promptPayload = await promptResponse.json().catch(() => ({}));
   if (!promptResponse.ok) {
-    throw new Error(promptPayload?.error?.message || promptPayload?.error || "ComfyUI ha rifiutato il workflow. Controlla modello e nodi.");
+    const nodeErrors = promptPayload?.node_errors ? JSON.stringify(promptPayload.node_errors) : "";
+    throw new Error(promptPayload?.error?.message || promptPayload?.error || nodeErrors || "ComfyUI ha rifiutato il workflow. Controlla modello e nodi.");
   }
   const promptId = promptPayload.prompt_id;
   if (!promptId) throw new Error("ComfyUI non ha restituito un prompt_id.");
@@ -1759,6 +1768,7 @@ function DeepFrameDirectorPanel({ elements }) {
   });
   const [comfyUrl, setComfyUrl] = useState("http://127.0.0.1:8188");
   const [comfyStatus, setComfyStatus] = useState({ state: "idle", message: "Non testato" });
+  const [availableCheckpoints, setAvailableCheckpoints] = useState([]);
   const [shotStates, setShotStates] = useState({});
   const [selectedSceneState, setSelectedScene] = useState(null);
   const shots = useMemo(() => scenes.map((scene) => (
@@ -1792,7 +1802,12 @@ function DeepFrameDirectorPanel({ elements }) {
       }
       const response = await fetch(`${baseUrl}/system_stats`);
       if (!response.ok) throw new Error("ComfyUI non risponde su /system_stats.");
-      setComfyStatus({ state: "online", message: "ComfyUI online" });
+      const checkpoints = await fetchComfyCheckpoints(baseUrl);
+      setAvailableCheckpoints(checkpoints);
+      if (checkpoints.length > 0 && !checkpoints.includes(config.model)) {
+        updateConfig("model", checkpoints[0]);
+      }
+      setComfyStatus({ state: "online", message: checkpoints.length ? `ComfyUI online · ${checkpoints.length} checkpoint` : "ComfyUI online · nessun checkpoint trovato" });
     } catch (error) {
       setComfyStatus({ state: "error", message: error.message });
     }
@@ -1801,6 +1816,14 @@ function DeepFrameDirectorPanel({ elements }) {
   const generateSceneWithComfy = async (sceneNumber) => {
     const shot = shots.find((item) => item.sceneNumber === sceneNumber);
     if (!shot || shot.status === "generating") return;
+    if (availableCheckpoints.length > 0 && !availableCheckpoints.includes(config.model)) {
+      const nextModel = availableCheckpoints[0];
+      updateConfig("model", nextModel);
+      const message = `Checkpoint non valido. Ho selezionato ${nextModel}: premi di nuovo Genera.`;
+      saveShotState(sceneNumber, { ...shot, status: "ready", error: message });
+      setComfyStatus({ state: "error", message });
+      return;
+    }
     saveShotState(sceneNumber, { ...shot, status: "generating", error: "" });
     try {
       const result = await submitComfyWorkflow({ comfyUrl, shot, config });
@@ -1894,7 +1917,18 @@ function DeepFrameDirectorPanel({ elements }) {
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: "5px", fontSize: "10px", color: "#777", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px" }}>
             Checkpoint
-            <input value={config.model} onChange={(event) => updateConfig("model", event.target.value)} placeholder="sd_xl_base_1.0.safetensors" style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "6px", color: "#bbb", padding: "8px 9px", fontSize: "12px", fontFamily: "monospace", textTransform: "none", letterSpacing: 0 }} />
+            {availableCheckpoints.length > 0 ? (
+              <select value={config.model} onChange={(event) => updateConfig("model", event.target.value)} style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "6px", color: "#ddd", padding: "8px 9px", fontSize: "12px", fontFamily: "monospace", textTransform: "none", letterSpacing: 0 }}>
+                {availableCheckpoints.map((checkpoint) => (
+                  <option key={checkpoint} value={checkpoint}>{checkpoint}</option>
+                ))}
+              </select>
+            ) : (
+              <input value={config.model} onChange={(event) => updateConfig("model", event.target.value)} placeholder="sd_xl_base_1.0.safetensors" style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "6px", color: "#bbb", padding: "8px 9px", fontSize: "12px", fontFamily: "monospace", textTransform: "none", letterSpacing: 0 }} />
+            )}
+            <span style={{ color: "#666", fontSize: "9px", lineHeight: 1.35, textTransform: "none", letterSpacing: 0 }}>
+              Dopo il test connessione uso solo checkpoint rilevati in ComfyUI.
+            </span>
           </label>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "8px" }}>
             {[
