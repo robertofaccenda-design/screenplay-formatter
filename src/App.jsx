@@ -1764,6 +1764,60 @@ const buildDirectorSidecar = ({ shots, config, comfyUrl }) => ({
   })),
 });
 
+// ─── Export storyboard in PDF ────────────────────────────────────────────
+// Le immagini generate (via ComfyUI locale o Pollinations.ai) restano solo
+// nell'app finché non si esporta: questo produce un documento stampabile
+// (finestra window.print(), stesso pattern usato per sceneggiatura/report)
+// con un frame per scena, cast, ambientazione e sinossi — pronto da condividere
+// con cast/troupe senza dover riaprire DeepFrame.
+const buildStoryboardPrintHtml = ({ shots, config, title }) => {
+  const styleLabel = DIRECTOR_STYLES[config.style]?.label || config.style;
+  const generatedCount = shots.filter((shot) => shot.imageUrl).length;
+  const cards = shots.map((shot) => `
+    <div class="card">
+      <div class="frame">
+        ${shot.imageUrl
+          ? `<img src="${escapeHtml(shot.imageUrl)}" alt="Scena ${shot.sceneNumber}" />`
+          : `<div class="placeholder">Nessun frame generato</div>`}
+      </div>
+      <div class="meta">
+        <div class="scene-no">SC. ${shot.sceneNumber}</div>
+        <div class="heading">${escapeHtml(shot.heading)}</div>
+        <div class="badges">
+          <span class="badge">${escapeHtml(shot.environment || "")}</span>
+          <span class="badge">${escapeHtml(shot.moment || "")}</span>
+          ${shot.cast.length ? `<span class="badge">${escapeHtml(shot.cast.join(", "))}</span>` : ""}
+        </div>
+        ${shot.excerpt ? `<div class="excerpt">${escapeHtml(shot.excerpt)}</div>` : ""}
+      </div>
+    </div>`).join("");
+
+  return `<!DOCTYPE html>
+<html lang="it"><head><meta charset="UTF-8"><title>Storyboard ${escapeHtml(title)}</title>
+<style>
+  @page{size:A4;margin:14mm}
+  body{font-family:Georgia,'Times New Roman',serif;background:white;color:#111;margin:0}
+  h1{font-family:Arial,sans-serif;font-size:16pt;margin:0 0 3mm}
+  .subtitle{font-family:Arial,sans-serif;font-size:9pt;color:#666;margin-bottom:9mm}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8mm}
+  .card{break-inside:avoid;page-break-inside:avoid;border:1px solid #ccc;border-radius:4px;overflow:hidden}
+  .frame{width:100%;aspect-ratio:16/9;background:#eee;display:flex;align-items:center;justify-content:center}
+  .frame img{width:100%;height:100%;object-fit:cover;display:block}
+  .placeholder{font-family:Arial,sans-serif;font-size:9pt;color:#999}
+  .meta{padding:3mm 4mm 4mm}
+  .scene-no{font-family:'Courier New',monospace;font-size:8pt;color:#888}
+  .heading{font-family:Arial,sans-serif;font-weight:bold;font-size:10.5pt;text-transform:uppercase;margin:1mm 0 2mm}
+  .badges{display:flex;gap:2mm;flex-wrap:wrap;margin-bottom:2mm}
+  .badge{font-family:Arial,sans-serif;font-size:7.5pt;background:#f0f0f0;border-radius:3px;padding:1mm 2mm;color:#555}
+  .excerpt{font-size:9pt;line-height:1.5;color:#333}
+</style></head><body>
+<h1>Storyboard — ${escapeHtml(title)}</h1>
+<div class="subtitle">Stile: ${escapeHtml(styleLabel)} · ${generatedCount}/${shots.length} frame generati · DeepFrame Director</div>
+<div class="grid">${cards}</div>
+<script>window.addEventListener("load",()=>{window.focus();window.print();});</script>
+</body></html>`;
+};
+
 const getDirectorProgress = ({ elements, config, shotStates }) => {
   const scenes = Array.isArray(elements) ? extractDirectorScenes(elements) : [];
   const shots = scenes.map((scene) => buildDirectorShot(scene, config, shotStates?.[scene.number]));
@@ -1969,6 +2023,7 @@ function DeepFrameDirectorPanel({
   setComfyUrl,
   shotStates,
   setShotStates,
+  title,
 }) {
   const scenes = useMemo(() => extractDirectorScenes(elements), [elements]);
   const [comfyStatus, setComfyStatus] = useState({ state: "idle", message: "Non testato" });
@@ -2112,6 +2167,18 @@ function DeepFrameDirectorPanel({
     URL.revokeObjectURL(url);
   };
 
+  const exportStoryboardPdf = () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      window.alert("Il browser ha bloccato l'apertura della finestra PDF. Abilita i popup per esportare lo storyboard.");
+      return;
+    }
+    const html = buildStoryboardPrintHtml({ shots, config, title: title || "Sceneggiatura" });
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   if (!scenes.length) {
     return (
       <div style={{ flex: 1, display: "grid", placeItems: "center", color: "#666", fontFamily: "sans-serif" }}>
@@ -2202,6 +2269,12 @@ function DeepFrameDirectorPanel({
           <button onClick={exportSidecar} style={{ border: "1px solid rgba(79,195,247,.28)", background: "rgba(79,195,247,.08)", color: "#4FC3F7", borderRadius: "6px", padding: "8px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
             Scarica pacchetto storyboard JSON
           </button>
+          <button onClick={exportStoryboardPdf} style={{ border: "1px solid rgba(200,169,110,.35)", background: "rgba(200,169,110,.1)", color: "#c8a96e", borderRadius: "6px", padding: "8px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
+            Esporta storyboard PDF
+          </button>
+          <div style={{ color: "#666", fontFamily: "sans-serif", fontSize: "10px", lineHeight: "1.4" }}>
+            Apre una finestra di stampa con un frame per scena (immagine, ambientazione, cast, sinossi): scegli "Salva come PDF" nella finestra di stampa del browser.
+          </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -5801,6 +5874,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
                 setComfyUrl={setDirectorComfyUrl}
                 shotStates={directorShotStates}
                 setShotStates={setDirectorShotStates}
+                title={file ? file.name.replace(/\.[^.]+$/, "") : "Sceneggiatura"}
               />
             )}
             {!busy && !elements && activeTab === "director" && (
