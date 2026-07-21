@@ -1,0 +1,7 @@
+interface:
+  display_name: "Carica profilo"
+  short_description: "Carica il profilo operativo dalla vault"
+  default_prompt: "Usa $carica-profilo per caricare il mio contesto operativo dalla vault."
+
+policy:
+  allow_implicit_invocation: true

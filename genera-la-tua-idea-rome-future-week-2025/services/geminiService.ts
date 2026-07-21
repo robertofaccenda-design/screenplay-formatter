@@ -14,7 +14,7 @@ const DEFAULT_LM_STUDIO_ENDPOINT = isLocalAppHost ? LOCAL_PROXY_LM_STUDIO_ENDPOI
 const DEFAULT_LM_STUDIO_MODEL = 'gemma-4';
 
 const getActSystemInstruction = (act: number, narrativeStructure: string, narrativeTone: string): string => {
-  let baseInstruction = `Sei un narratore educativo e creativo per studenti di scuola media (11-14 anni). Le tue storie sono coinvolgenti e inseriscono in modo sottile fatti educativi. Il tuo tono è ${narrativeTone}, incoraggiante e stimolante. Mantieni la coerenza con i personaggi principali definiti nel prompt e assicurati di coinvolgerli attivamente nella narrazione, non solo il protagonista. La parte della storia dovrebbe essere di circa 150 parole.`;
+  let baseInstruction = `Sei un narratore educativo e creativo per studenti di scuola media (11-14 anni). Le tue storie sono coinvolgenti e inseriscono in modo sottile fatti educativi. Il tuo tono è ${narrativeTone}, incoraggiante e stimolante. Mantieni la coerenza con i personaggi principali definiti nel prompt e assicurati di coinvolgerli attivamente nella narrazione, non solo il protagonista. La parte della storia dovrebbe essere di circa 150 parole. Quando devi proporre scelte, scrivi tre azioni concrete e diverse tra loro, collegate a personaggi, luoghi, oggetti o conflitti appena narrati. Ogni scelta deve essere una frase breve ma specifica. Non usare mai segnaposto generici come "Scelta A", "Scelta B", "Opzione 1" o formule intercambiabili.`;
   
   switch (narrativeStructure) {
     case 'pixar':
@@ -60,15 +60,90 @@ interface StoryGenerationResult {
   choices: string[];
 }
 
-const getFallbackChoices = (act: number): string[] => (
-  act >= 5
-    ? []
-    : [
-      'Accettare la sfida e andare avanti',
-      'Cercare un aiuto prima di decidere',
-      'Seguire una strada inattesa',
-    ]
-);
+const GENERIC_CHOICE_PATTERN = /^\s*(?:scelta|opzione|choice|option)\s*(?:[a-c]|[1-3])?[\s.)-]*$/i;
+
+const normalizeChoice = (choice: string): string => choice
+  .replace(/\s+/g, ' ')
+  .replace(/^["'“”]+|["'“”]+$/g, '')
+  .trim();
+
+const isGenericChoice = (choice: string): boolean => {
+  const normalized = normalizeChoice(choice);
+  return !normalized
+    || GENERIC_CHOICE_PATTERN.test(normalized)
+    || /^(?:accettare la sfida|cercare un aiuto|seguire una strada inattesa)$/i.test(normalized);
+};
+
+const getRelevantSentence = (storyText: string): string => {
+  const cleaned = storyText
+    .replace(/\s+/g, ' ')
+    .replace(/[“”"]/g, '')
+    .trim();
+  const sentences = cleaned
+    .split(/(?<=[.!?])\s+/)
+    .map(sentence => sentence.trim())
+    .filter(sentence => sentence.length > 35);
+  const selected = sentences.at(-1) || sentences.at(-2) || cleaned;
+  return selected
+    .replace(/[.!?]+$/, '')
+    .slice(0, 90)
+    .trim();
+};
+
+const getCharacterCue = (storyText: string): string => {
+  const ignored = new Set([
+    'C', 'Un', 'Una', 'Il', 'Lo', 'La', 'I', 'Gli', 'Le', 'Nel', 'Nella', 'Sul', 'Sulla',
+    'Atto', 'Finche', 'Finalmente', 'Quando', 'Mentre', 'Dopo', 'Prima',
+  ]);
+  const matches = storyText.match(/\b[A-ZÀ-Ý][a-zà-ÿ]{2,}\b/g) || [];
+  return matches.find(name => !ignored.has(name)) || 'un alleato';
+};
+
+const getFallbackChoices = (act: number, storyText = ''): string[] => {
+  if (act >= 5) return [];
+
+  const focus = getRelevantSentence(storyText) || 'quello che e appena accaduto';
+  const ally = getCharacterCue(storyText);
+  const actActions: Record<number, string[]> = {
+    1: [
+      `Seguire l'indizio legato a ${focus}`,
+      `Raccontare a ${ally} che cosa e successo`,
+      `Nascondere la scoperta e osservare cosa cambia`,
+    ],
+    2: [
+      `Entrare nel luogo collegato a ${focus}`,
+      `Chiedere a ${ally} di affrontare insieme il pericolo`,
+      `Cercare una prova prima che qualcuno se ne accorga`,
+    ],
+    3: [
+      `Affrontare direttamente il conflitto nato da ${focus}`,
+      `Proteggere ${ally} rinunciando alla soluzione piu facile`,
+      `Usare cio che e stato scoperto per cambiare piano`,
+    ],
+    4: [
+      `Tentare l'ultima mossa prima che ${focus} diventi irreversibile`,
+      `Fidarsi di ${ally} anche se sembra rischioso`,
+      `Svelare la verita e accettarne le conseguenze`,
+    ],
+  };
+
+  return actActions[act] || [
+    `Seguire la conseguenza piu urgente di ${focus}`,
+    `Coinvolgere ${ally} nella prossima decisione`,
+    `Prendere una strada rischiosa ma coerente con la scoperta`,
+  ];
+};
+
+const completeChoices = (choices: string[], act: number, storyText: string): string[] => {
+  if (act >= 5) return [];
+  const fallbackChoices = getFallbackChoices(act, storyText);
+  const usefulChoices = choices
+    .map(normalizeChoice)
+    .filter(choice => !isGenericChoice(choice));
+  const merged = [...usefulChoices, ...fallbackChoices]
+    .filter((choice, index, list) => choice && list.findIndex(item => item.toLowerCase() === choice.toLowerCase()) === index);
+  return merged.slice(0, 3);
+};
 
 const cleanStoryText = (text: string): string => text
   .replace(/^\s*#{1,6}\s*/, '')
@@ -120,9 +195,10 @@ const parseStoryResponse = (responseText: string, act: number): StoryGenerationR
     jsonStartIndex = arrayStartIndex;
     choicesJson = responseText.substring(arrayStartIndex, arrayEndIndex + 1);
   } else {
+    const storyText = cleanStoryText(responseText);
     return {
-      storyText: cleanStoryText(responseText),
-      choices: getFallbackChoices(act),
+      storyText,
+      choices: getFallbackChoices(act, storyText),
     };
   }
 
@@ -134,7 +210,7 @@ const parseStoryResponse = (responseText: string, act: number): StoryGenerationR
       ? parsedChoices
       : parsedChoices?.scelte_critiche || parsedChoices?.choices || parsedChoices?.scelte;
     if (!Array.isArray(choicesData)) {
-      if (act < 5) return { storyText, choices: getFallbackChoices(act) };
+      if (act < 5) return { storyText, choices: getFallbackChoices(act, storyText) };
       throw new Error("Le scelte non sono una matrice valida o la matrice è vuota prima dell'atto finale.");
     }
     
@@ -148,10 +224,14 @@ const parseStoryResponse = (responseText: string, act: number): StoryGenerationR
         // Handle common property names for choice text
         if (typeof choice.text === 'string') return choice.text;
         if (typeof choice.descrizione === 'string') return choice.descrizione;
+        if (typeof choice.scelta === 'string') return choice.scelta;
+        if (typeof choice.choice === 'string') return choice.choice;
+        if (typeof choice.option === 'string') return choice.option;
+        if (typeof choice.azione === 'string') return choice.azione;
         
         // Fallback: Find the first string property in the object, assuming it's the choice text.
         // This makes it robust against other property names like "choice", "option", etc.
-        const firstStringValue = Object.values(choice).find(value => typeof value === 'string');
+        const firstStringValue = Object.values(choice).find(value => typeof value === 'string' && !isGenericChoice(value));
         if (firstStringValue) {
           return firstStringValue as string;
         }
@@ -161,16 +241,16 @@ const parseStoryResponse = (responseText: string, act: number): StoryGenerationR
     }).filter((c): c is string => c !== null);
 
     if (choices.length === 0 && act < 5) {
-      return { storyText, choices: getFallbackChoices(act) };
+      return { storyText, choices: getFallbackChoices(act, storyText) };
     }
 
     if (choices.length !== choicesData.length) {
         throw new Error("Formato delle scelte non valido all'interno della matrice.");
     }
 
-    return { storyText, choices };
+    return { storyText, choices: completeChoices(choices, act, storyText) };
   } catch (error) {
-    if (act < 5) return { storyText, choices: getFallbackChoices(act) };
+    if (act < 5) return { storyText, choices: getFallbackChoices(act, storyText) };
     console.error("Errore nel parsing delle scelte JSON:", choicesJson);
     if (error instanceof Error) {
         throw new Error(`Impossibile analizzare le scelte fornite dall'IA. Dettagli: ${error.message}`);

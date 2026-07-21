@@ -1,0 +1,7 @@
+interface:
+  display_name: "LLM Wiki"
+  short_description: "Gestisce la knowledge base personale Obsidian"
+  default_prompt: "Usa $llm-wiki per cercare, aggiornare o controllare la mia knowledge base."
+
+policy:
+  allow_implicit_invocation: true

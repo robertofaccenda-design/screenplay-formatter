@@ -652,6 +652,85 @@ Commit pubblicato:
 f306244 Show friendly unsupported DOC error
 ```
 
+## Aggiornamento 2026-05-17: segnalazioni LM Studio deduplicate
+
+Problema osservato:
+
+- in Analisi Drammaturgica, se LM Studio falliva su piu blocchi, la sezione **Analisi / Segnalazioni** poteva mostrare piu messaggi identici tipo `LM Studio JSON non valido`;
+- il risultato era tecnicamente corretto, ma poco leggibile e sembrava un errore moltiplicato.
+
+Fix applicato:
+
+- le segnalazioni tecniche generate dai fallback locali vengono normalizzate e deduplicate;
+- se lo stesso problema LM Studio compare su piu blocchi, la dashboard mostra un solo avviso rappresentativo;
+- resta visibile il messaggio utile per capire il limite del modello locale, senza riempire la pagina di duplicati.
+
+Commit pubblicato:
+
+```text
+6607950 Deduplicate LM Studio fallback analysis signals
+```
+
+Verifiche effettuate:
+
+```text
+npm run lint
+npm run build
+```
+
+## Aggiornamento 2026-05-17: Piano di lavoro senza giornate vuote
+
+Problema osservato:
+
+- nel Breakdown Reparti, spostando manualmente scene da una giornata all'altra, poteva rimanere una giornata senza scene;
+- il piano continuava a mostrarla anche se non aveva piu contenuto produttivo.
+
+Fix applicato:
+
+- dopo spostamenti o rimozioni di scene, il piano viene compattato automaticamente;
+- le giornate vuote vengono eliminate;
+- le giornate rimanenti vengono rinumerate in ordine;
+- vengono preservati i dati utili delle giornate ancora valide, come data, orari e note quando presenti.
+
+Commit pubblicato:
+
+```text
+9359b4e Remove empty work plan days after scene moves
+```
+
+Verifiche effettuate:
+
+```text
+npm run lint
+npm run build
+```
+
+## Aggiornamento 2026-05-17: riapertura risultati gia generati
+
+Problema osservato:
+
+- se l'utente aveva gia generato Analisi Drammaturgica, Breakdown Reparti, Schede Location o Schede Personaggio, un nuovo click rilanciava l'AI;
+- questo era lento con LM Studio e poteva sovrascrivere o peggiorare un risultato gia utile.
+
+Fix applicato:
+
+- se il risultato esiste gia nella sessione corrente, il pulsante apre direttamente la relativa scheda;
+- non viene inviata una nuova richiesta ad Anthropic o LM Studio;
+- le etichette dei pulsanti passano a **Apri Analisi**, **Apri Breakdown**, **Apri Schede Location** e **Apri Schede Personaggio** quando il dato e gia disponibile.
+
+Commit pubblicato:
+
+```text
+a5d84ad Open existing analysis artifacts without regenerating
+```
+
+Verifiche effettuate:
+
+```text
+npm run lint
+npm run build
+```
+
 ## File importanti citati
 
 - `/Users/Robjhon/Documents/github/screenplay-formatter/src/App.jsx`

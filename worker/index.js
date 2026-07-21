@@ -508,11 +508,90 @@ const missingApiKeyResponse = () => jsonResponse({
   error: "Per usare le funzioni AI serve una chiave Anthropic. Inserisci la tua chiave personale nel campo dedicato e riprova. Se stai gestendo tu l'app, puoi anche configurare una chiave predefinita sul Worker.",
 }, 502);
 
-const getFallbackStoryChoices = (act) => act >= 5 ? [] : [
-  "Accettare la sfida e andare avanti",
-  "Cercare un aiuto prima di decidere",
-  "Seguire una strada inattesa",
-];
+const genericStoryChoicePattern = /^\s*(?:scelta|opzione|choice|option)\s*(?:[a-c]|[1-3])?[\s.)-]*$/i;
+
+const normalizeStoryChoice = (choice) => String(choice || "")
+  .replace(/\s+/g, " ")
+  .replace(/^["'“”]+|["'“”]+$/g, "")
+  .trim();
+
+const isGenericStoryChoice = (choice) => {
+  const normalized = normalizeStoryChoice(choice);
+  return !normalized
+    || genericStoryChoicePattern.test(normalized)
+    || /^(?:accettare la sfida|cercare un aiuto|seguire una strada inattesa)$/i.test(normalized);
+};
+
+const getRelevantStorySentence = (storyText) => {
+  const cleaned = String(storyText || "")
+    .replace(/\s+/g, " ")
+    .replace(/[“”"]/g, "")
+    .trim();
+  const sentences = cleaned
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 35);
+  const selected = sentences.at(-1) || sentences.at(-2) || cleaned;
+  return selected
+    .replace(/[.!?]+$/, "")
+    .slice(0, 90)
+    .trim();
+};
+
+const getStoryCharacterCue = (storyText) => {
+  const ignored = new Set([
+    "C", "Un", "Una", "Il", "Lo", "La", "I", "Gli", "Le", "Nel", "Nella", "Sul", "Sulla",
+    "Atto", "Finche", "Finalmente", "Quando", "Mentre", "Dopo", "Prima",
+  ]);
+  const matches = String(storyText || "").match(/\b[A-ZÀ-Ý][a-zà-ÿ]{2,}\b/g) || [];
+  return matches.find((name) => !ignored.has(name)) || "un alleato";
+};
+
+const getFallbackStoryChoices = (act, storyText = "") => {
+  if (act >= 5) return [];
+
+  const focus = getRelevantStorySentence(storyText) || "quello che e appena accaduto";
+  const ally = getStoryCharacterCue(storyText);
+  const actActions = {
+    1: [
+      `Seguire l'indizio legato a ${focus}`,
+      `Raccontare a ${ally} che cosa e successo`,
+      `Nascondere la scoperta e osservare cosa cambia`,
+    ],
+    2: [
+      `Entrare nel luogo collegato a ${focus}`,
+      `Chiedere a ${ally} di affrontare insieme il pericolo`,
+      `Cercare una prova prima che qualcuno se ne accorga`,
+    ],
+    3: [
+      `Affrontare direttamente il conflitto nato da ${focus}`,
+      `Proteggere ${ally} rinunciando alla soluzione piu facile`,
+      `Usare cio che e stato scoperto per cambiare piano`,
+    ],
+    4: [
+      `Tentare l'ultima mossa prima che ${focus} diventi irreversibile`,
+      `Fidarsi di ${ally} anche se sembra rischioso`,
+      `Svelare la verita e accettarne le conseguenze`,
+    ],
+  };
+
+  return actActions[act] || [
+    `Seguire la conseguenza piu urgente di ${focus}`,
+    `Coinvolgere ${ally} nella prossima decisione`,
+    "Prendere una strada rischiosa ma coerente con la scoperta",
+  ];
+};
+
+const completeStoryChoices = (choices, act, storyText) => {
+  if (act >= 5) return [];
+  const fallbackChoices = getFallbackStoryChoices(act, storyText);
+  const usefulChoices = choices
+    .map(normalizeStoryChoice)
+    .filter((choice) => !isGenericStoryChoice(choice));
+  const merged = [...usefulChoices, ...fallbackChoices]
+    .filter((choice, index, list) => choice && list.findIndex((item) => item.toLowerCase() === choice.toLowerCase()) === index);
+  return merged.slice(0, 3);
+};
 
 const cleanStoryText = (text) => text
   .replace(/^\s*#{1,6}\s*/, "")
@@ -551,9 +630,10 @@ const parseStoryResponse = (responseText, act) => {
   } else if (arrayStartIndex !== -1 && arrayEndIndex !== -1 && arrayEndIndex > arrayStartIndex) {
     choicesJson = responseText.slice(arrayStartIndex, arrayEndIndex + 1);
   } else {
+    const storyText = cleanStoryText(responseText);
     return {
-      storyText: cleanStoryText(responseText),
-      choices: getFallbackStoryChoices(act),
+      storyText,
+      choices: getFallbackStoryChoices(act, storyText),
     };
   }
 
@@ -570,7 +650,7 @@ const parseStoryResponse = (responseText, act) => {
     ? parsedChoices
     : parsedChoices?.scelte_critiche || parsedChoices?.choices || parsedChoices?.scelte;
   if (!Array.isArray(choicesData)) {
-    if (act < 5) return { storyText, choices: getFallbackStoryChoices(act) };
+    if (act < 5) return { storyText, choices: getFallbackStoryChoices(act, storyText) };
     throw new Error("Le scelte non sono valide o sono vuote prima dell'atto finale.");
   }
 
@@ -579,17 +659,21 @@ const parseStoryResponse = (responseText, act) => {
     if (choice && typeof choice === "object") {
       if (typeof choice.text === "string") return choice.text;
       if (typeof choice.descrizione === "string") return choice.descrizione;
-      const firstStringValue = Object.values(choice).find((value) => typeof value === "string");
+      if (typeof choice.scelta === "string") return choice.scelta;
+      if (typeof choice.choice === "string") return choice.choice;
+      if (typeof choice.option === "string") return choice.option;
+      if (typeof choice.azione === "string") return choice.azione;
+      const firstStringValue = Object.values(choice).find((value) => typeof value === "string" && !isGenericStoryChoice(value));
       if (firstStringValue) return firstStringValue;
     }
     return null;
   }).filter(Boolean);
 
   if (choices.length === 0 && act < 5) {
-    return { storyText, choices: getFallbackStoryChoices(act) };
+    return { storyText, choices: getFallbackStoryChoices(act, storyText) };
   }
 
-  return { storyText, choices };
+  return { storyText, choices: completeStoryChoices(choices, act, storyText) };
 };
 
 const countMatches = (text, pattern) => (text.match(pattern) || []).length;
