@@ -772,7 +772,7 @@ const handleFormat = async (request, env) => {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 8000,
         temperature: mode === "conservative" ? 0 : mode === "organic" ? 0.72 : 0.65,
         system: getFormatSystemPrompt(mode),
@@ -1124,7 +1124,7 @@ const handleStory = async (request, env) => {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-5",
         max_tokens: 2200,
         temperature: 0.7,
         system: systemInstruction,

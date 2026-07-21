@@ -327,7 +327,7 @@ Stato attuale:
 - Il generatore storia usa la stessa configurazione AI impostata in DeepFrame:
   - se DeepFrame usa **LM Studio locale**, anche `Crea la tua storia` chiama LM Studio dal browser;
   - altrimenti usa Anthropic con modello Sonnet.
-- Il modello Claude configurato per le storie e `claude-sonnet-4-20250514`, non Haiku.
+- Il modello Claude configurato per le storie e `claude-sonnet-5`, non Haiku (aggiornato il 2026-07-21: `claude-sonnet-4-20250514` era stato ritirato e causava errori "model: claude-sonnet-4-20250514" negli endpoint Cloudflare `functions/api/format.js` e `worker/index.js`).
 - Il generatore puo esportare la storia in PDF o TXT.
 - A fine storia e stato aggiunto un pulsante per caricare il testo creato dentro la **Formattazione Creativa** di DeepFrame.
 - La chiave API e condivisa con quella inserita dall'utente per il parsing/formattazione.

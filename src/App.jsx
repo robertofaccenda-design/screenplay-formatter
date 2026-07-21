@@ -1317,8 +1317,12 @@ const mergeLocalAnalysisChunks = (partials, sourceElements = []) => {
 
 const parseSceneHeadingMeta = (heading) => {
   const text = String(heading || "").trim().toUpperCase();
-  const internoEsterno = text.startsWith("INT./EST") || text.startsWith("INT/EST") ? "INT/EST"
-    : text.startsWith("EST") || text.startsWith("EXT") ? "EST"
+  // Salta un eventuale numero di scena iniziale (es. "2 EST. STRADA - NOTTE")
+  // prima di riconoscere INT./EST., altrimenti le scene numerate esterne
+  // vengono etichettate erroneamente come interne.
+  const withoutSceneNumber = text.replace(/^\d+[A-Z]?[\s.]*/, "");
+  const internoEsterno = withoutSceneNumber.startsWith("INT./EST") || withoutSceneNumber.startsWith("INT/EST") ? "INT/EST"
+    : withoutSceneNumber.startsWith("EST") || withoutSceneNumber.startsWith("EXT") ? "EST"
       : "INT";
   const momento = ["GIORNO", "NOTTE", "ALBA", "TRAMONTO"].find((part) => text.includes(part)) || "NON_SPECIFICATO";
   const location = text
@@ -1469,6 +1473,146 @@ function getScenePageEighths(elements) {
   return sceneData;
 }
 
+// ─── Ponte verso OpenMontage (github.com/calesthio/OpenMontage) ────────────
+// Converte gli elements classificati in un artifact scene_plan conforme a
+// schemas/artifacts/scene_plan.schema.json del progetto OpenMontage, riusando
+// il parsing di scena già esistente (parseSceneHeadingMeta, getScenePageEighths)
+// così la stima di durata resta coerente con quella mostrata in .fountain/.pdf.
+const OPENMONTAGE_LIGHTING = {
+  GIORNO: { lighting_key: "natural", color_temperature: "neutral" },
+  NOTTE: { lighting_key: "low_key", color_temperature: "cool" },
+  ALBA: { lighting_key: "golden_hour", color_temperature: "warm" },
+  TRAMONTO: { lighting_key: "golden_hour", color_temperature: "warm" },
+  NON_SPECIFICATO: { lighting_key: "natural", color_temperature: "neutral" },
+};
+
+const defaultOpenMontageShotLanguage = (momento) => ({
+  shot_size: "medium",
+  camera_movement: "static",
+  depth_of_field: "medium",
+  ...(OPENMONTAGE_LIGHTING[momento] || OPENMONTAGE_LIGHTING.NON_SPECIFICATO),
+});
+
+const openMontageTextureKeywords = (internoEsterno) => (
+  internoEsterno === "INT/EST" ? ["interior", "exterior"]
+    : internoEsterno === "EST" ? ["exterior"]
+      : ["interior"]
+);
+
+function buildOpenMontageScenePlan(elements, opts = {}) {
+  const title = opts.title || "Sceneggiatura";
+  const pageEighths = getScenePageEighths(elements);
+  const scenes = [];
+  let current = null;
+  let currentCharacter = "";
+  let pendingParenthetical = null;
+  let cursorSeconds = 0;
+
+  const closeScene = () => {
+    if (!current) return;
+    // Regola standard sceneggiatura: 1 pagina (8/8) ≈ 1 minuto di schermo.
+    const duration = Math.max(3, (current._eighths || 1) * 7.5);
+    current.start_seconds = Math.round(cursorSeconds * 10) / 10;
+    current.end_seconds = Math.round((cursorSeconds + duration) * 10) / 10;
+    cursorSeconds += duration;
+    if (!current._isContainer) {
+      current.type = current.character_actions.length ? "character_scene" : "broll";
+    }
+    if (!current.character_actions.length) delete current.character_actions;
+    if (!current.required_assets.length) delete current.required_assets;
+    delete current._eighths;
+    delete current._isContainer;
+    scenes.push(current);
+    current = null;
+  };
+
+  elements.forEach((element, index) => {
+    if (isRealSceneHeading(element)) {
+      closeScene();
+      const meta = parseSceneHeadingMeta(element.content);
+      current = {
+        id: `scene_${String(scenes.length + 1).padStart(3, "0")}`,
+        type: "character_scene",
+        description: element.content,
+        start_seconds: 0,
+        end_seconds: 0,
+        shot_language: defaultOpenMontageShotLanguage(meta.momento),
+        texture_keywords: openMontageTextureKeywords(meta.internoEsterno),
+        character_actions: [],
+        required_assets: [{ type: "video", description: `${element.content} — ${meta.location}`, source: "generate" }],
+        _eighths: pageEighths.get(index)?.eighths || 1,
+      };
+      currentCharacter = "";
+      pendingParenthetical = null;
+      return;
+    }
+
+    if (!current) {
+      current = {
+        id: "scene_000",
+        type: "text_card",
+        description: element.type === "title" ? element.content : "",
+        start_seconds: 0,
+        end_seconds: 0,
+        shot_language: defaultOpenMontageShotLanguage("NON_SPECIFICATO"),
+        texture_keywords: [],
+        character_actions: [],
+        required_assets: [],
+        _eighths: 1,
+        _isContainer: true,
+      };
+    }
+
+    switch (element.type) {
+      case "action":
+        current.description = current.description ? `${current.description} ${element.content}` : element.content;
+        break;
+      case "character":
+        currentCharacter = String(element.content || "").trim().toUpperCase();
+        break;
+      case "parenthetical":
+        pendingParenthetical = element.content;
+        break;
+      case "dialogue": {
+        if (!currentCharacter) break;
+        const action = { character_id: currentCharacter, action_sequence: ["parla"], dialogue: element.content };
+        if (pendingParenthetical) action.notes = pendingParenthetical;
+        current.character_actions.push(action);
+        pendingParenthetical = null;
+        break;
+      }
+      case "transition":
+        current.transition_out = element.content;
+        break;
+      default:
+        break;
+    }
+  });
+  closeScene();
+
+  if (!scenes.length) {
+    scenes.push({
+      id: "scene_001",
+      type: "text_card",
+      description: title,
+      start_seconds: 0,
+      end_seconds: 5,
+      shot_language: defaultOpenMontageShotLanguage("NON_SPECIFICATO"),
+    });
+  }
+
+  return {
+    version: "1.0",
+    scenes,
+    metadata: {
+      source: "screenplay-formatter",
+      title,
+      generated_at: new Date().toISOString(),
+      note: "scene_plan generato da Screenplay Formatter: durate stimate con la regola 1 pagina = 1 minuto (8/8), shot_language di partenza da rifinire in OpenMontage prima della generazione asset.",
+    },
+  };
+}
+
 const hashText = (value) => {
   const text = String(value || "");
   let hash = 0;
@@ -1613,6 +1757,10 @@ const buildDirectorSidecar = ({ shots, config, comfyUrl }) => ({
     negativePrompt: shot.negativePrompt,
     signature: shot.signature,
     status: shot.status,
+    // Le imageUrl di Pollinations sono link pubblici stabili (stesso prompt+seed
+    // → stessa immagine) e restano validi fuori dall'app; quelle di ComfyUI
+    // locale sono blob: URL validi solo nella sessione del browser corrente.
+    imageUrl: shot.promptId ? null : shot.imageUrl || null,
   })),
 });
 
@@ -1908,6 +2056,43 @@ function DeepFrameDirectorPanel({
     }
   };
 
+  // ─── Percorso gratuito senza server: Pollinations.ai ────────────────────
+  // Nessuna API key, nessun ComfyUI locale da tenere acceso: instrada lo
+  // stesso prompt (già costruito da buildDirectorPrompt) verso modelli
+  // immagine open-source (Flux) ospitati gratuitamente da pollinations.ai.
+  // Utile per uno storyboard rapido pubblicabile anche dal sito Netlify,
+  // non per i frame definitivi (per quelli resta preferibile ComfyUI locale).
+  const buildPollinationsUrl = (shot, runConfig) => {
+    const seedSource = hashText(`${shot.signature}-${shot.prompt}`);
+    const seed = parseInt(seedSource.slice(0, 8), 36) % 1000000;
+    const params = new URLSearchParams({
+      width: String(runConfig.width || 768),
+      height: String(runConfig.height || 432),
+      seed: String(seed),
+      nologo: "true",
+    });
+    return `https://image.pollinations.ai/prompt/${encodeURIComponent(shot.prompt)}?${params.toString()}`;
+  };
+
+  const generateSceneWithPollinations = (sceneNumber) => {
+    const shot = shots.find((item) => item.sceneNumber === sceneNumber);
+    if (!shot) return;
+    const imageUrl = buildPollinationsUrl(shot, config);
+    saveShotState(sceneNumber, {
+      ...shot,
+      status: "generated",
+      generatedAt: new Date().toISOString(),
+      promptId: null,
+      comfyImage: null,
+      imageUrl,
+      error: "",
+    });
+  };
+
+  const generateAllWithPollinations = () => {
+    shots.forEach((shot) => generateSceneWithPollinations(shot.sceneNumber));
+  };
+
   const resetScene = (sceneNumber) => {
     setShotStates((current) => {
       const next = { ...current };
@@ -1946,6 +2131,13 @@ function DeepFrameDirectorPanel({
           <button onClick={generateChanged} disabled={generatingCount > 0} style={{ border: "1px solid rgba(200,169,110,.35)", background: "rgba(200,169,110,.12)", color: generatingCount > 0 ? "#777" : "#c8a96e", borderRadius: "6px", padding: "7px 9px", fontSize: "11px", fontWeight: "bold", cursor: generatingCount > 0 ? "default" : "pointer" }}>
             {generatingCount > 0 ? "Generando" : "Batch"}
           </button>
+        </div>
+
+        <button onClick={generateAllWithPollinations} style={{ border: "1px solid rgba(79,195,247,.3)", background: "rgba(79,195,247,.08)", color: "#4FC3F7", borderRadius: "6px", padding: "8px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer", width: "100%", marginBottom: "16px" }}>
+          Storyboard gratis (tutte le scene)
+        </button>
+        <div style={{ color: "#666", fontFamily: "sans-serif", fontSize: "10px", lineHeight: "1.4", marginTop: "-10px", marginBottom: "16px" }}>
+          Via Pollinations.ai — modelli open-source (Flux), nessuna API key, nessun server locale da tenere acceso. Frame indicativi per lo storyboard, non definitivi.
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
@@ -2059,6 +2251,9 @@ function DeepFrameDirectorPanel({
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   <button onClick={() => generateSceneWithComfy(selectedShot.sceneNumber)} disabled={selectedShot.status === "generating"} style={{ border: "1px solid rgba(100,200,120,.32)", background: "rgba(100,200,120,.09)", color: selectedShot.status === "generating" ? "#777" : "#64C878", borderRadius: "6px", padding: "8px 10px", fontSize: "11px", fontWeight: "bold", cursor: selectedShot.status === "generating" ? "default" : "pointer" }}>
                     {selectedShot.status === "generating" ? "Generazione ComfyUI..." : selectedShot.status === "generated" ? "Rigenera via ComfyUI" : "Genera via ComfyUI"}
+                  </button>
+                  <button onClick={() => generateSceneWithPollinations(selectedShot.sceneNumber)} style={{ border: "1px solid rgba(79,195,247,.3)", background: "rgba(79,195,247,.08)", color: "#4FC3F7", borderRadius: "6px", padding: "8px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
+                    Genera gratis (Pollinations)
                   </button>
                   <button onClick={() => resetScene(selectedShot.sceneNumber)} style={{ border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.05)", color: "#aaa", borderRadius: "6px", padding: "8px 10px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
                     Invalida scena
@@ -5016,6 +5211,18 @@ ${buildScreenplayHtml(elements)}
     a.click(); URL.revokeObjectURL(url);
   };
 
+  const downloadOpenMontageScenePlan = () => {
+    if (!elements) return;
+    const title = file ? file.name.replace(/\.[^.]+$/, "") : undefined;
+    const scenePlan = buildOpenMontageScenePlan(elements, { title });
+    const content = JSON.stringify(scenePlan, null, 2);
+    const blob = new Blob([content], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url;
+    a.download = `${title || "sceneggiatura"}_scene_plan.json`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
   const openPdfPrint = ({ scenePageBreaks = false } = {}) => {
     if (!elements) return;
     const printWindow = window.open("", "_blank");
@@ -5452,9 +5659,10 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
                 <button style={s.btnSec} onClick={downloadHtml}>.html</button>
                 <button style={s.btnSec} onClick={downloadPdf}>.pdf</button>
                 <button style={s.btnSec} onClick={downloadPdfByScene}>pdf/page</button>
+                <button style={s.btnSec} onClick={downloadOpenMontageScenePlan}>OpenMontage</button>
               </div>
               <div style={{ fontSize: "10px", color: "#555", fontFamily: "sans-serif", marginTop: "6px" }}>
-                .fountain → Final Draft, Fade In · .html → stampa · .pdf continuo · pdf/page → una scena per pagina
+                .fountain → Final Draft, Fade In · .html → stampa · .pdf continuo · pdf/page → una scena per pagina · OpenMontage → scene_plan.json per generazione video AI
               </div>
             </div>
           )}
