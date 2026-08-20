@@ -6,6 +6,7 @@ const API_FORMAT           = "/api/format";
 const API_ANALYZE          = "/api/analyze";
 const API_CHARACTER_SHEETS = "/api/character-sheets";
 const API_BREAKDOWN        = "/api/breakdown";
+const API_BUDGET           = "/api/budget";
 const API_LOCATION_SHEETS  = "/api/location-sheets";
 const LUMINA_STUDIO_URL    = "https://lumina-studio-1033723633880.us-west1.run.app/";
 const ANTHROPIC_KEY_STORAGE = "screenplayFormatter.anthropicApiKey";
@@ -590,6 +591,35 @@ SCHEMA ESATTO:
       "scene_consigliate": [1],
       "motivazione": "",
       "ore_stimate": 4
+    }
+  ]
+}`,
+  budget: `Sei un produttore esecutivo italiano. Genera una bozza di budget di produzione a partire da un breakdown JSON già strutturato (cast, location, props, costumi, comparse, piano di lavoro).
+
+ISTRUZIONI IMPORTANTI:
+- Usa convenzioni italiane (CCNL cinema, INPS ex-ENPALS), NON tariffe o sindacati statunitensi.
+- Genera una voce per ogni personaggio del cast (quantita = giorni_lavoro_stimati, unita "giornate"), una per ogni location, voci aggregate per props/costumi/comparse, e voci minime per troupe tecnica (regia, fotografia, audio) e post-produzione.
+- Usa valori realistici per produzioni indipendenti/formative italiane a budget contenuto.
+- NON includere assicurazioni, spese generali o imprevisti: sono calcolati a parte dall'applicazione.
+- Restituisci ESCLUSIVAMENTE un oggetto JSON valido, senza markdown e senza spiegazioni.
+
+SCHEMA ESATTO:
+{
+  "valuta": "EUR",
+  "nota_metodologica": "",
+  "macro_fasi": [
+    { "fase": "Preparazione", "giorni_stimati": 1, "note": "" }
+  ],
+  "voci": [
+    {
+      "categoria": "ATL",
+      "reparto": "",
+      "voce": "",
+      "quantita": 1,
+      "unita": "giornate",
+      "costo_unitario_stimato_eur": 0,
+      "fonte_stima": "standard_settore",
+      "note": ""
     }
   ]
 }`,
@@ -1429,6 +1459,126 @@ const buildFallbackBreakdown = (elements = []) => {
   };
 };
 
+// ─── Budget di produzione — fallback locale senza AI ───────────────────────────
+const ITALIAN_INDIE_DAILY_RATES = {
+  regia: 180,
+  aiuto_regia: 110,
+  fotografia: 150,
+  fonico: 110,
+  macchinista: 90,
+  costumista: 90,
+  truccatore: 90,
+  cast_protagonista: 150,
+  cast_secondario: 100,
+  cast_figurazione: 70,
+  cast_non_specificato: 100,
+  comparsa: 60,
+  attrezzatura_kit: 200,
+  montaggio: 150,
+  color: 120,
+  mix_audio: 120,
+};
+
+const LOCATION_ALLESTIMENTO_RATES = {
+  minimo: 80,
+  medio: 150,
+  importante: 350,
+  costruito_in_studio: 600,
+  non_specificato: 150,
+};
+
+const buildFallbackBudget = (breakdown) => {
+  const reparti = breakdown?.reparti || {};
+  const perScena = breakdown?.per_scena || [];
+  const castItems = normalizeBreakdownCast(reparti, perScena);
+  const locationItems = normalizeBreakdownLocations(reparti, perScena);
+  const extraItems = normalizeBreakdownExtras(reparti, perScena);
+  const giorniRiprese = Math.max(1, Number(breakdown?.riepilogo?.giorni_ripresa_stimati) || asArray(breakdown?.piano_lavoro_suggerito).length || 1);
+  const castRate = (ruoloTipo) => ITALIAN_INDIE_DAILY_RATES[`cast_${ruoloTipo}`] || ITALIAN_INDIE_DAILY_RATES.cast_non_specificato;
+  const autoNote = "Stima automatica senza AI: tariffa indicativa di mercato indipendente italiano, da verificare.";
+
+  const voci = [];
+
+  voci.push({
+    categoria: "ATL", reparto: "Regia", voce: "Compenso regista",
+    quantita: giorniRiprese, unita: "giornate", costo_unitario_stimato_eur: ITALIAN_INDIE_DAILY_RATES.regia,
+    fonte_stima: "piano_lavoro", note: autoNote,
+  });
+
+  castItems.forEach((cast) => {
+    voci.push({
+      categoria: "ATL", reparto: "Cast artistico", voce: `Cachet ${cast.nome || "personaggio"}`,
+      quantita: Number(cast.giorni_lavoro_stimati) || 1, unita: "giornate",
+      costo_unitario_stimato_eur: castRate(cast.ruolo_tipo),
+      fonte_stima: "breakdown_cast", note: autoNote,
+    });
+  });
+
+  locationItems.forEach((loc) => {
+    voci.push({
+      categoria: "BTL", reparto: "Location e permessi", voce: `Permesso/uso location: ${loc.nome || "da definire"}`,
+      quantita: 1, unita: "a corpo",
+      costo_unitario_stimato_eur: LOCATION_ALLESTIMENTO_RATES[loc.allestimento] || LOCATION_ALLESTIMENTO_RATES.non_specificato,
+      fonte_stima: "breakdown_locations", note: autoNote,
+    });
+  });
+
+  [
+    ["Aiuto regia", "aiuto_regia"],
+    ["Direttore della fotografia", "fotografia"],
+    ["Fonico di presa diretta", "fonico"],
+    ["Macchinista", "macchinista"],
+  ].forEach(([label, key]) => {
+    voci.push({
+      categoria: "BTL", reparto: "Troupe tecnica", voce: label,
+      quantita: giorniRiprese, unita: "giornate", costo_unitario_stimato_eur: ITALIAN_INDIE_DAILY_RATES[key],
+      fonte_stima: "piano_lavoro", note: "Stima automatica senza AI: troupe tecnica minima indicativa.",
+    });
+  });
+
+  if (castItems.length) {
+    voci.push({
+      categoria: "BTL", reparto: "Costumi e trucco", voce: "Costumista/truccatore (giornate riprese)",
+      quantita: giorniRiprese, unita: "giornate",
+      costo_unitario_stimato_eur: ITALIAN_INDIE_DAILY_RATES.costumista + ITALIAN_INDIE_DAILY_RATES.truccatore,
+      fonte_stima: "breakdown_costumi", note: autoNote,
+    });
+  }
+
+  const totaleComparse = extraItems.comparse.reduce((sum, item) => sum + (Number(item.quantità_stimata) || 0), 0);
+  if (totaleComparse > 0) {
+    voci.push({
+      categoria: "BTL", reparto: "Comparse", voce: "Comparse (totale stimato)",
+      quantita: totaleComparse, unita: "persone/giornata", costo_unitario_stimato_eur: ITALIAN_INDIE_DAILY_RATES.comparsa,
+      fonte_stima: "breakdown_comparse", note: "Stima automatica senza AI: quantità aggregata dal breakdown.",
+    });
+  }
+
+  voci.push({
+    categoria: "BTL", reparto: "Attrezzature tecniche", voce: "Noleggio kit camera/luci/audio",
+    quantita: giorniRiprese, unita: "noleggio/giorno", costo_unitario_stimato_eur: ITALIAN_INDIE_DAILY_RATES.attrezzatura_kit,
+    fonte_stima: "standard_settore", note: "Stima automatica senza AI: kit base indicativo.",
+  });
+
+  const giorniPost = Math.max(3, Math.round(giorniRiprese * 1.5));
+  voci.push(
+    { categoria: "POST", reparto: "Post-produzione immagine", voce: "Montaggio", quantita: giorniPost, unita: "giornate", costo_unitario_stimato_eur: ITALIAN_INDIE_DAILY_RATES.montaggio, fonte_stima: "standard_settore", note: "Stima automatica senza AI." },
+    { categoria: "POST", reparto: "Post-produzione immagine", voce: "Color correction", quantita: Math.max(1, Math.round(giorniPost / 3)), unita: "giornate", costo_unitario_stimato_eur: ITALIAN_INDIE_DAILY_RATES.color, fonte_stima: "standard_settore", note: "Stima automatica senza AI." },
+    { categoria: "POST", reparto: "Post-produzione audio", voce: "Mix audio", quantita: Math.max(1, Math.round(giorniPost / 3)), unita: "giornate", costo_unitario_stimato_eur: ITALIAN_INDIE_DAILY_RATES.mix_audio, fonte_stima: "standard_settore", note: "Stima automatica senza AI." },
+  );
+
+  return {
+    valuta: "EUR",
+    nota_metodologica: "Bozza generata automaticamente senza AI, con tariffe indicative di mercato indipendente italiano. Da validare con un line producer prima di qualunque uso ufficiale (bando, contratto, produzione reale).",
+    macro_fasi: [
+      { fase: "Preparazione", giorni_stimati: Math.max(3, Math.round(giorniRiprese / 2)), note: "Stima automatica." },
+      { fase: "Riprese", giorni_stimati: giorniRiprese, note: "Da piano di lavoro/breakdown." },
+      { fase: "Post-produzione", giorni_stimati: giorniPost, note: "Stima automatica." },
+    ],
+    voci,
+  };
+};
+
 const formatPageEighths = (eighths) => {
   const pages = Math.floor(eighths / 8);
   const remainder = eighths % 8;
@@ -1531,7 +1681,7 @@ function buildOpenMontageScenePlan(elements, opts = {}) {
       closeScene();
       const meta = parseSceneHeadingMeta(element.content);
       current = {
-        id: `scene_${String(scenes.length + 1).padStart(3, "0")}`,
+        id: `scene_${String(scenes.length).padStart(3, "0")}`,
         type: "character_scene",
         description: element.content,
         start_seconds: 0,
@@ -1611,6 +1761,100 @@ function buildOpenMontageScenePlan(elements, opts = {}) {
       note: "scene_plan generato da Screenplay Formatter: durate stimate con la regola 1 pagina = 1 minuto (8/8), shot_language di partenza da rifinire in OpenMontage prima della generazione asset.",
     },
   };
+}
+
+// ─── Stima costi generazione video OpenMontage ──────────────────────────
+// OpenMontage mostra questa stima solo dopo aver aperto il progetto con un
+// coding agent locale (fase scene_plan → assets). Questa funzione replica
+// lo stesso calcolo (durata video da generare × tariffa/secondo + buffer
+// retry) direttamente in DeepFrame, così si ha un'idea di massima PRIMA di
+// aprire OpenMontage — è una stima indicativa basata su tariffe pubbliche
+// tipiche (es. Seedance/Kling via fal.ai), non collegata al registro
+// provider reale configurato nell'installazione OpenMontage dell'utente.
+const OPENMONTAGE_DEFAULT_RATES = [
+  { id: "standard", label: "Standard", ratePerSecond: 0.30 },
+  { id: "fast", label: "Fast", ratePerSecond: 0.24 },
+];
+
+function estimateOpenMontageVideoCost(scenePlan, { maxClipSeconds = 15, bufferPercent = 30, rates = OPENMONTAGE_DEFAULT_RATES } = {}) {
+  const videoScenes = (scenePlan?.scenes || []).filter((scene) => (
+    (scene.required_assets || []).some((asset) => asset.type === "video" && asset.source === "generate")
+  ));
+  const totalVideoSeconds = videoScenes.reduce((sum, scene) => (
+    sum + Math.max(0, (scene.end_seconds || 0) - (scene.start_seconds || 0))
+  ), 0);
+  const clipCount = totalVideoSeconds > 0 ? Math.ceil(totalVideoSeconds / maxClipSeconds) : 0;
+  const tiers = rates.map((tier) => {
+    const base = totalVideoSeconds * tier.ratePerSecond;
+    const withBuffer = base * (1 + bufferPercent / 100);
+    return { ...tier, base, withBuffer };
+  });
+  return { sceneCount: videoScenes.length, totalVideoSeconds, clipCount, tiers };
+}
+
+function OpenMontageCostEstimate({ elements, title }) {
+  const [expanded, setExpanded] = useState(false);
+  const [rateStandard, setRateStandard] = useState(0.30);
+  const [rateFast, setRateFast] = useState(0.24);
+  const [bufferPercent, setBufferPercent] = useState(30);
+  const [maxClipSeconds, setMaxClipSeconds] = useState(15);
+
+  const estimate = useMemo(() => {
+    if (!elements) return null;
+    const scenePlan = buildOpenMontageScenePlan(elements, { title });
+    return estimateOpenMontageVideoCost(scenePlan, {
+      maxClipSeconds,
+      bufferPercent,
+      rates: [
+        { id: "standard", label: "Standard", ratePerSecond: rateStandard },
+        { id: "fast", label: "Fast", ratePerSecond: rateFast },
+      ],
+    });
+  }, [elements, title, rateStandard, rateFast, bufferPercent, maxClipSeconds]);
+
+  if (!estimate) return null;
+
+  return (
+    <div style={{ marginTop: "10px", border: "1px solid rgba(200,169,110,.2)", borderRadius: "6px", padding: "10px 12px", background: "rgba(200,169,110,.04)" }}>
+      <button onClick={() => setExpanded((value) => !value)} style={{ background: "none", border: "none", color: "#c8a96e", fontFamily: "sans-serif", fontSize: "11px", fontWeight: "bold", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: "6px" }}>
+        {expanded ? "▾" : "▸"} Stima costi generazione video OpenMontage (indicativa)
+      </button>
+      {expanded && (
+        <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "8px" }}>
+          <div style={{ fontSize: "11px", color: "#999", fontFamily: "sans-serif", lineHeight: 1.5 }}>
+            {estimate.sceneCount} scene con video da generare · {estimate.totalVideoSeconds.toFixed(1)}s totali · ~{estimate.clipCount} clip (max {maxClipSeconds}s/clip)
+          </div>
+          {estimate.tiers.map((tier) => (
+            <div key={tier.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", fontFamily: "monospace", color: "#ddd" }}>
+              <span>{tier.label} (${tier.ratePerSecond.toFixed(2)}/s)</span>
+              <span>${tier.base.toFixed(2)} base → ${tier.withBuffer.toFixed(2)} con buffer {bufferPercent}%</span>
+            </div>
+          ))}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "8px", marginTop: "4px" }}>
+            <label style={{ fontSize: "9px", color: "#777", fontFamily: "sans-serif", display: "flex", flexDirection: "column", gap: "3px" }}>
+              Tariffa Standard ($/s)
+              <input type="number" step="0.01" min="0" value={rateStandard} onChange={(event) => setRateStandard(Number(event.target.value))} style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "4px", color: "#ddd", padding: "5px 6px", fontSize: "11px", fontFamily: "monospace" }} />
+            </label>
+            <label style={{ fontSize: "9px", color: "#777", fontFamily: "sans-serif", display: "flex", flexDirection: "column", gap: "3px" }}>
+              Tariffa Fast ($/s)
+              <input type="number" step="0.01" min="0" value={rateFast} onChange={(event) => setRateFast(Number(event.target.value))} style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "4px", color: "#ddd", padding: "5px 6px", fontSize: "11px", fontFamily: "monospace" }} />
+            </label>
+            <label style={{ fontSize: "9px", color: "#777", fontFamily: "sans-serif", display: "flex", flexDirection: "column", gap: "3px" }}>
+              Buffer retry (%)
+              <input type="number" min="0" value={bufferPercent} onChange={(event) => setBufferPercent(Number(event.target.value))} style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "4px", color: "#ddd", padding: "5px 6px", fontSize: "11px", fontFamily: "monospace" }} />
+            </label>
+            <label style={{ fontSize: "9px", color: "#777", fontFamily: "sans-serif", display: "flex", flexDirection: "column", gap: "3px" }}>
+              Durata max clip (s)
+              <input type="number" min="1" value={maxClipSeconds} onChange={(event) => setMaxClipSeconds(Number(event.target.value))} style={{ background: "#11131a", border: "1px solid rgba(255,255,255,.1)", borderRadius: "4px", color: "#ddd", padding: "5px 6px", fontSize: "11px", fontFamily: "monospace" }} />
+            </label>
+          </div>
+          <div style={{ fontSize: "9px", color: "#666", fontFamily: "sans-serif", lineHeight: 1.4, marginTop: "2px" }}>
+            Stima illustrativa basata su tariffe pubbliche indicative (tipo Seedance/Kling via fal.ai) — non è collegata al registro provider reale del tuo OpenMontage locale, che potrebbe avere prezzi o provider diversi configurati. Narrazione (Piper TTS) e musica (ricerca Pixabay) restano gratuite se usi quella configurazione in OpenMontage.
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 const hashText = (value) => {
@@ -4614,6 +4858,242 @@ function BreakdownPanelContent({ data, initialWorkPlan }) {
   );
 }
 
+// ─── Budget di produzione — pannello editabile ─────────────────────────────────
+const BUDGET_CATEGORIE = ["ATL", "BTL", "POST"];
+const BUDGET_CATEGORIE_LABEL = { ATL: "ATL — Above The Line", BTL: "BTL — Below The Line", POST: "Post-produzione" };
+const BUDGET_CATEGORIE_COLOR = { ATL: "#66BB6A", BTL: "#81C784", POST: "#4DB6AC" };
+
+const formatEur = (value) => (
+  new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(Number(value) || 0)
+);
+
+const budgetCsvCell = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+
+function BudgetPanel({ data }) {
+  if (!data) return null;
+  const panelKey = JSON.stringify({ count: asArray(data.voci).length, nota: data.nota_metodologica });
+  return <BudgetPanelContent key={panelKey} data={data} />;
+}
+
+function BudgetPanelContent({ data }) {
+  const [activeTab, setActiveTab] = useState("riepilogo");
+  const [voci, setVoci] = useState(() => asArray(data.voci).map((voce, index) => ({
+    id: index,
+    categoria: BUDGET_CATEGORIE.includes(voce?.categoria) ? voce.categoria : "BTL",
+    reparto: voce?.reparto || "Da definire",
+    voce: voce?.voce || "",
+    quantita: Number(voce?.quantita) || 0,
+    unita: voce?.unita || "a corpo",
+    costo_unitario_stimato_eur: Number(voce?.costo_unitario_stimato_eur) || 0,
+    fonte_stima: voce?.fonte_stima || "standard_settore",
+    note: voce?.note || "",
+  })));
+  const [assicurazioniPct, setAssicurazioniPct] = useState(3);
+  const [speseGeneraliPct, setSpeseGeneraliPct] = useState(8);
+  const [impreviistiPct, setImpreviistiPct] = useState(10);
+  const nextIdRef = useRef(voci.length);
+
+  const updateVoce = (id, field, value) => {
+    setVoci((current) => current.map((v) => (v.id === id ? { ...v, [field]: value } : v)));
+  };
+  const removeVoce = (id) => setVoci((current) => current.filter((v) => v.id !== id));
+  const addVoce = (categoria) => {
+    const id = nextIdRef.current++;
+    setVoci((current) => [...current, {
+      id, categoria, reparto: "", voce: "", quantita: 1, unita: "a corpo",
+      costo_unitario_stimato_eur: 0, fonte_stima: "manuale", note: "",
+    }]);
+  };
+
+  const totaliPerCategoria = useMemo(() => {
+    const totals = { ATL: 0, BTL: 0, POST: 0 };
+    voci.forEach((v) => {
+      const tot = (Number(v.quantita) || 0) * (Number(v.costo_unitario_stimato_eur) || 0);
+      totals[v.categoria] = (totals[v.categoria] || 0) + tot;
+    });
+    return totals;
+  }, [voci]);
+
+  const subtotaleProduzione = BUDGET_CATEGORIE.reduce((sum, cat) => sum + (totaliPerCategoria[cat] || 0), 0);
+  const assicurazioni = subtotaleProduzione * (Number(assicurazioniPct) || 0) / 100;
+  const speseGenerali = subtotaleProduzione * (Number(speseGeneraliPct) || 0) / 100;
+  const imprevisti = subtotaleProduzione * (Number(impreviistiPct) || 0) / 100;
+  const totaleGenerale = subtotaleProduzione + assicurazioni + speseGenerali + imprevisti;
+
+  const exportCsv = () => {
+    const rows = [["Categoria", "Reparto", "Voce", "Quantità", "Unità", "Costo unitario (EUR)", "Totale (EUR)", "Fonte stima", "Note"]];
+    voci.forEach((v) => {
+      const tot = (Number(v.quantita) || 0) * (Number(v.costo_unitario_stimato_eur) || 0);
+      rows.push([v.categoria, v.reparto, v.voce, v.quantita, v.unita, v.costo_unitario_stimato_eur, tot.toFixed(2), v.fonte_stima, v.note]);
+    });
+    rows.push([]);
+    rows.push(["Subtotale produzione (ATL+BTL+POST)", "", "", "", "", "", subtotaleProduzione.toFixed(2)]);
+    rows.push([`Assicurazioni (${assicurazioniPct}%)`, "", "", "", "", "", assicurazioni.toFixed(2)]);
+    rows.push([`Spese generali (${speseGeneraliPct}%)`, "", "", "", "", "", speseGenerali.toFixed(2)]);
+    rows.push([`Imprevisti (${impreviistiPct}%)`, "", "", "", "", "", imprevisti.toFixed(2)]);
+    rows.push(["TOTALE GENERALE", "", "", "", "", "", totaleGenerale.toFixed(2)]);
+    const csv = rows.map((row) => row.map(budgetCsvCell).join(";")).join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "budget_produzione_deepframe.csv";
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const exportPdf = () => {
+    const stripId = (voce) => {
+      const rest = { ...voce };
+      delete rest.id;
+      return { ...rest, totale_eur: formatEur((Number(rest.quantita) || 0) * (Number(rest.costo_unitario_stimato_eur) || 0)) };
+    };
+    const displayData = {
+      valuta: data.valuta || "EUR",
+      nota_metodologica: data.nota_metodologica || "Bozza di budget generata da DeepFrame: valori indicativi da validare con un line producer.",
+      macro_fasi: data.macro_fasi,
+      riepilogo_economico: {
+        "Subtotale ATL": formatEur(totaliPerCategoria.ATL || 0),
+        "Subtotale BTL": formatEur(totaliPerCategoria.BTL || 0),
+        "Subtotale POST": formatEur(totaliPerCategoria.POST || 0),
+        "Subtotale produzione": formatEur(subtotaleProduzione),
+        [`Assicurazioni (${assicurazioniPct}%)`]: formatEur(assicurazioni),
+        [`Spese generali (${speseGeneraliPct}%)`]: formatEur(speseGenerali),
+        [`Imprevisti (${impreviistiPct}%)`]: formatEur(imprevisti),
+        "TOTALE GENERALE": formatEur(totaleGenerale),
+      },
+      voci_ATL: voci.filter((v) => v.categoria === "ATL").map(stripId),
+      voci_BTL: voci.filter((v) => v.categoria === "BTL").map(stripId),
+      voci_POST: voci.filter((v) => v.categoria === "POST").map(stripId),
+    };
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+    printWindow.document.open();
+    printWindow.document.write(buildReportPrintHtml("Budget di produzione", displayData));
+    printWindow.document.close();
+  };
+
+  const inputStyle = { background: "rgba(0,0,0,.25)", border: "1px solid rgba(255,255,255,.14)", borderRadius: "5px", color: "#ddd", fontFamily: "sans-serif", fontSize: "12px", padding: "6px 8px", boxSizing: "border-box" };
+
+  const tabBtn = (id, label) => (
+    <button key={id} onClick={() => setActiveTab(id)} style={{
+      padding: "6px 14px", fontSize: "12px", fontFamily: "sans-serif", cursor: "pointer",
+      border: "none", borderRadius: "6px",
+      background: activeTab === id ? "rgba(102,187,106,.15)" : "transparent",
+      color: activeTab === id ? "#66BB6A" : "#777", transition: "all .2s",
+    }}>{label}</button>
+  );
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div style={{ display: "flex", padding: "10px 20px 0", gap: "4px", borderBottom: "1px solid rgba(255,255,255,.05)", justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "4px" }}>
+          {tabBtn("riepilogo", "Riepilogo")}
+          {tabBtn("voci", `Voci di budget (${voci.length})`)}
+        </div>
+        <div style={{ display: "flex", gap: "8px", padding: "6px 0" }}>
+          <button onClick={exportCsv} style={{ background: "rgba(255,255,255,.06)", color: "#ccc", border: "1px solid rgba(255,255,255,.12)", borderRadius: "6px", padding: "7px 12px", fontSize: "12px", cursor: "pointer", fontFamily: "sans-serif" }}>Esporta CSV (Excel)</button>
+          <button onClick={exportPdf} style={{ background: "rgba(255,255,255,.06)", color: "#ccc", border: "1px solid rgba(255,255,255,.12)", borderRadius: "6px", padding: "7px 12px", fontSize: "12px", cursor: "pointer", fontFamily: "sans-serif" }}>Esporta PDF</button>
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
+        {activeTab === "riepilogo" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div style={{ background: "rgba(102,187,106,.06)", border: "1px solid rgba(102,187,106,.2)", borderRadius: "8px", padding: "14px 16px" }}>
+              <div style={{ fontSize: "10px", color: "#66BB6A", fontFamily: "sans-serif", fontWeight: "bold", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "1px" }}>💶 Nota metodologica</div>
+              <div style={{ fontSize: "13px", color: "#ccc", fontFamily: "Georgia, serif", lineHeight: "1.8" }}>
+                {data.nota_metodologica || "Bozza generata da DeepFrame a partire dal breakdown reparti. Valori indicativi: da validare con un line producer prima di qualunque uso ufficiale."}
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
+              {BUDGET_CATEGORIE.map((cat) => (
+                <div key={cat} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: "8px", padding: "14px", textAlign: "center" }}>
+                  <div style={{ fontSize: "10px", color: "#888", fontFamily: "sans-serif", marginBottom: "6px" }}>{BUDGET_CATEGORIE_LABEL[cat]}</div>
+                  <div style={{ fontSize: "20px", fontWeight: "bold", fontFamily: "sans-serif", color: BUDGET_CATEGORIE_COLOR[cat] }}>{formatEur(totaliPerCategoria[cat] || 0)}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: "8px", padding: "16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", fontFamily: "sans-serif", color: "#aaa" }}>
+                <span>Subtotale produzione (ATL + BTL + POST)</span><span>{formatEur(subtotaleProduzione)}</span>
+              </div>
+              {[
+                ["Assicurazioni", assicurazioniPct, setAssicurazioniPct, assicurazioni],
+                ["Spese generali", speseGeneraliPct, setSpeseGeneraliPct, speseGenerali],
+                ["Imprevisti", impreviistiPct, setImpreviistiPct, imprevisti],
+              ].map(([label, pct, setPct, amount]) => (
+                <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", fontFamily: "sans-serif", color: "#aaa" }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {label}
+                    <input type="number" value={pct} onChange={(e) => setPct(e.target.value)} style={{ ...inputStyle, width: "56px" }} />%
+                  </span>
+                  <span>{formatEur(amount)}</span>
+                </div>
+              ))}
+              <div style={{ borderTop: "1px solid rgba(255,255,255,.1)", marginTop: "6px", paddingTop: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "13px", fontFamily: "sans-serif", color: "#f0ead8", fontWeight: "bold" }}>TOTALE GENERALE</span>
+                <span style={{ fontSize: "22px", fontFamily: "sans-serif", fontWeight: "bold", color: "#66BB6A" }}>{formatEur(totaleGenerale)}</span>
+              </div>
+            </div>
+
+            {asArray(data.macro_fasi).length > 0 && (
+              <div>
+                <div style={{ fontSize: "11px", color: "#888", fontFamily: "sans-serif", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px" }}>Macro-fasi</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {data.macro_fasi.map((fase, index) => (
+                    <div key={index} style={{ background: "rgba(255,255,255,.025)", border: "1px solid rgba(255,255,255,.06)", borderRadius: "8px", padding: "10px 14px", display: "flex", gap: "12px", alignItems: "center", fontSize: "12px", fontFamily: "sans-serif" }}>
+                      <span style={{ color: "#66BB6A", fontWeight: "bold", minWidth: "120px" }}>{fase.fase}</span>
+                      <span style={{ color: "#888" }}>{fase.giorni_stimati} gg</span>
+                      {fase.note && <span style={{ color: "#666", fontStyle: "italic" }}>{fase.note}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "voci" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "22px" }}>
+            {BUDGET_CATEGORIE.map((cat) => {
+              const rows = voci.filter((v) => v.categoria === cat);
+              return (
+                <div key={cat}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                    <div style={{ fontSize: "12px", fontFamily: "sans-serif", fontWeight: "bold", color: BUDGET_CATEGORIE_COLOR[cat] }}>
+                      {BUDGET_CATEGORIE_LABEL[cat]} <span style={{ color: "#666", fontWeight: "normal" }}>· {formatEur(totaliPerCategoria[cat] || 0)}</span>
+                    </div>
+                    <button onClick={() => addVoce(cat)} style={{ background: "rgba(102,187,106,.1)", color: "#66BB6A", border: "1px solid rgba(102,187,106,.3)", borderRadius: "6px", padding: "5px 10px", fontSize: "11px", cursor: "pointer", fontFamily: "sans-serif" }}>+ Aggiungi voce</button>
+                  </div>
+                  {!rows.length && <EmptyBreakdownSection label={`voci ${cat}`} />}
+                  {rows.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      {rows.map((v) => {
+                        const totale = (Number(v.quantita) || 0) * (Number(v.costo_unitario_stimato_eur) || 0);
+                        return (
+                          <div key={v.id} style={{ background: "rgba(255,255,255,.025)", border: "1px solid rgba(255,255,255,.06)", borderRadius: "8px", padding: "10px 12px", display: "grid", gridTemplateColumns: "1.1fr 1.6fr 70px 90px 100px 90px 28px", gap: "8px", alignItems: "center" }}>
+                            <input value={v.reparto} onChange={(e) => updateVoce(v.id, "reparto", e.target.value)} style={inputStyle} placeholder="Reparto" />
+                            <input value={v.voce} onChange={(e) => updateVoce(v.id, "voce", e.target.value)} style={inputStyle} placeholder="Voce di costo" />
+                            <input type="number" value={v.quantita} onChange={(e) => updateVoce(v.id, "quantita", e.target.value)} style={inputStyle} title="Quantità" />
+                            <input value={v.unita} onChange={(e) => updateVoce(v.id, "unita", e.target.value)} style={inputStyle} placeholder="Unità" />
+                            <input type="number" value={v.costo_unitario_stimato_eur} onChange={(e) => updateVoce(v.id, "costo_unitario_stimato_eur", e.target.value)} style={inputStyle} title="Costo unitario €" />
+                            <span style={{ fontSize: "12px", fontFamily: "sans-serif", color: "#f0ead8", textAlign: "right" }}>{formatEur(totale)}</span>
+                            <button onClick={() => removeVoce(v.id)} title="Rimuovi voce" style={{ background: "rgba(255,107,107,.1)", color: "#ff9999", border: "1px solid rgba(255,107,107,.3)", borderRadius: "5px", cursor: "pointer", fontSize: "12px", padding: "4px 0" }}>×</button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── App principale ───────────────────────────────────────────────────────────
 let pdfJsPromise = null;
 
@@ -4712,11 +5192,13 @@ export default function App() {
   const [analysis, setAnalysis]         = useState(null);
   const [characterSheets, setCharacterSheets] = useState(null);
   const [breakdown, setBreakdown]               = useState(null);
+  const [budget, setBudget]                     = useState(null);
   const [locationSheets, setLocationSheets]     = useState(null);
   const [loading, setLoading]                   = useState(false);
   const [analyzing, setAnalyzing]               = useState(false);
   const [loadingSheets, setLoadingSheets]       = useState(false);
   const [loadingBreakdown, setLoadingBreakdown] = useState(false);
+  const [loadingBudget, setLoadingBudget]       = useState(false);
   const [loadingLocations, setLoadingLocations] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState("");
   const [error, setError]         = useState("");
@@ -4775,6 +5257,7 @@ export default function App() {
           setAnalysis(null);
           setCharacterSheets(null);
           setBreakdown(null);
+          setBudget(null);
           setLocationSheets(null);
           setActiveTab("preview");
           window.localStorage.setItem(ONBOARDING_STORAGE, ONBOARDING_FLOW_VERSION);
@@ -4955,6 +5438,7 @@ export default function App() {
     setAnalysis(null);
     setCharacterSheets(null);
     setBreakdown(null);
+    setBudget(null);
     setLocationSheets(null);
     setFile(f);
     try {
@@ -4976,6 +5460,7 @@ export default function App() {
     setAnalysis(null);
     setCharacterSheets(null);
     setBreakdown(null);
+    setBudget(null);
     setLocationSheets(null);
     setError("");
     setActiveTab("preview");
@@ -4997,6 +5482,7 @@ export default function App() {
     setAnalysis(null);
     setCharacterSheets(null);
     setBreakdown(null);
+    setBudget(null);
     setLocationSheets(null);
     setActiveTab("preview");
   };
@@ -5072,6 +5558,7 @@ export default function App() {
       setAnalysis(null);
       setCharacterSheets(null);
       setBreakdown(null);
+      setBudget(null);
       setLocationSheets(null);
       setActiveTab("preview");
     } catch (e) {
@@ -5246,6 +5733,34 @@ export default function App() {
     }
   };
 
+  const runBudget = async () => {
+    if (!breakdown) return;
+    if (budget) {
+      setActiveTab("budget");
+      return;
+    }
+    setLoadingBudget(true); setError("");
+    try {
+      const data = await postAiJson(API_BUDGET, { breakdown }, {
+        system: LOCAL_ANALYSIS_PROMPTS.budget,
+        user: `Genera la bozza di budget di produzione a partire da questo breakdown:\n\n${JSON.stringify(breakdown)}`,
+        temperature: 0.2,
+      });
+      setBudget(isLocalAi ? unwrapLocalPayload(data, ["budget", "budget_produzione"]) : data.budget);
+      setActiveTab("budget");
+    } catch (e) {
+      if (isLocalAi) {
+        console.warn("Budget LM Studio non valido, genero fallback locale:", e);
+        setBudget(buildFallbackBudget(breakdown));
+        setActiveTab("budget");
+        return;
+      }
+      setError("Errore budget: " + e.message);
+    } finally {
+      setLoadingBudget(false);
+    }
+  };
+
   const downloadFountain = () => {
     if (!elements) return;
     const content = toFountain(elements);
@@ -5349,12 +5864,13 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
     printWindow.document.close();
   };
 
-  const busy            = loading || analyzing || loadingSheets || loadingBreakdown || loadingLocations;
+  const busy            = loading || analyzing || loadingSheets || loadingBreakdown || loadingBudget || loadingLocations;
   const canFormat       = rawText.trim().length > 10 && !busy;
   const canImportDirect = rawText.trim().length > 10 && !busy;
   const canAnalyze      = !!elements && !busy;
   const canRunSheets    = !!elements && !busy;
   const canRunBreakdown = !!elements && !busy;
+  const canRunBudget    = !!breakdown && !busy;
   const updateOrganicOption = (key, value) => {
     setOrganicOptions((current) => ({ ...current, [key]: value }));
   };
@@ -5393,6 +5909,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
     btnAnalyze: { background: canAnalyze ? "linear-gradient(135deg,#7C4DFF,#651FFF)" : "rgba(124,77,255,.15)", color: canAnalyze ? "#fff" : "#7C4DFF", border: "1px solid rgba(124,77,255,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canAnalyze ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canAnalyze ? 1 : 0.5 },
     btnSheets:    { background: canRunSheets ? "linear-gradient(135deg,#00897B,#00695C)" : "rgba(0,137,123,.15)", color: canRunSheets ? "#fff" : "#00897B", border: "1px solid rgba(0,137,123,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canRunSheets ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canRunSheets ? 1 : 0.5 },
     btnBreakdown: { background: canRunBreakdown ? "linear-gradient(135deg,#E65100,#BF360C)" : "rgba(230,81,0,.15)", color: canRunBreakdown ? "#fff" : "#E65100", border: "1px solid rgba(230,81,0,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canRunBreakdown ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canRunBreakdown ? 1 : 0.5 },
+    btnBudget: { background: canRunBudget ? "linear-gradient(135deg,#2E7D32,#1B5E20)" : "rgba(46,125,50,.15)", color: canRunBudget ? "#fff" : "#66BB6A", border: "1px solid rgba(46,125,50,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: canRunBudget ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: canRunBudget ? 1 : 0.5 },
     btnLocations: { background: !busy ? "linear-gradient(135deg,#0277BD,#01579B)" : "rgba(2,119,189,.15)", color: !busy ? "#fff" : "#0277BD", border: "1px solid rgba(2,119,189,.4)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: !busy ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: !busy ? 1 : 0.5 },
     btnDirector: { background: !busy ? "linear-gradient(135deg,#263238,#c8a96e)" : "rgba(200,169,110,.1)", color: !busy ? "#fff" : "#8a7650", border: "1px solid rgba(200,169,110,.35)", borderRadius: "8px", padding: "12px 20px", fontWeight: "bold", fontSize: "14px", cursor: !busy ? "pointer" : "not-allowed", width: "100%", fontFamily: "sans-serif", opacity: !busy ? 1 : 0.5 },
     btnSec:     { background: "rgba(255,255,255,.06)", color: "#ccc", border: "1px solid rgba(255,255,255,.12)", borderRadius: "8px", padding: "10px 16px", fontSize: "13px", cursor: "pointer", fontFamily: "sans-serif", flex: 1 },
@@ -5690,6 +6207,11 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
               {loadingBreakdown ? "Breakdown in corso..." : breakdown ? "Apri Breakdown Reparti" : "Breakdown Reparti"}
             </button>
           )}
+          {elements && breakdown && (
+            <button style={s.btnBudget} disabled={!canRunBudget} onClick={runBudget} title={!breakdown ? "Genera prima il Breakdown Reparti" : undefined}>
+              {loadingBudget ? "Budget in corso..." : budget ? "Apri Budget di Produzione" : "Budget di Produzione"}
+            </button>
+          )}
           {elements && (
             <button style={s.btnLocations} disabled={busy} onClick={runLocationSheets}>
               {loadingLocations ? "Schede location..." : locationSheets ? "Apri Schede Location" : "Schede Location"}
@@ -5737,6 +6259,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
               <div style={{ fontSize: "10px", color: "#555", fontFamily: "sans-serif", marginTop: "6px" }}>
                 .fountain → Final Draft, Fade In · .html → stampa · .pdf continuo · pdf/page → una scena per pagina · OpenMontage → scene_plan.json per generazione video AI
               </div>
+              <OpenMontageCostEstimate elements={elements} title={file ? file.name.replace(/\.[^.]+$/, "") : undefined} />
             </div>
           )}
         </div>
@@ -5756,6 +6279,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
               {analysis && tabBtn("analisi", "Analisi", activeTab === "analisi")}
               {characterSheets && tabBtn("schede", "Schede", activeTab === "schede")}
               {breakdown && tabBtn("breakdown", "Breakdown", activeTab === "breakdown")}
+              {budget && tabBtn("budget", "Budget", activeTab === "budget")}
               {locationSheets && tabBtn("locations", "Location", activeTab === "locations")}
               {tabBtn("director", "Director / Storyboard", activeTab === "director")}
             {tabBtn("lumina", "Luci 3D", activeTab === "lumina")}
@@ -5809,6 +6333,15 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
                 <div style={{ width: "40px", height: "40px", border: "3px solid rgba(230,81,0,.2)", borderTop: "3px solid #E65100", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
                 <div style={{ fontFamily: "sans-serif", color: "#FFAB91", fontSize: "14px" }}>Breakdown per reparti in corso...</div>
                 <div style={{ fontFamily: "monospace", color: "#555", fontSize: "11px" }}>Cast · Location · Props · Costumi · Piano di lavoro</div>
+              </div>
+            )}
+
+            {/* Loading budget */}
+            {loadingBudget && (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "16px" }}>
+                <div style={{ width: "40px", height: "40px", border: "3px solid rgba(46,125,50,.2)", borderTop: "3px solid #2E7D32", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                <div style={{ fontFamily: "sans-serif", color: "#A5D6A7", fontSize: "14px" }}>Bozza di budget in corso...</div>
+                <div style={{ fontFamily: "monospace", color: "#555", fontSize: "11px" }}>ATL · BTL · Post-produzione · Voci da breakdown</div>
               </div>
             )}
 
@@ -5932,6 +6465,11 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
             {/* Tab: Breakdown reparti */}
             {!busy && breakdown && activeTab === "breakdown" && (
               <BreakdownPanel data={breakdown} />
+            )}
+
+            {/* Tab: Budget di produzione */}
+            {!busy && budget && activeTab === "budget" && (
+              <BudgetPanel data={budget} />
             )}
 
             {/* Tab: Schede personaggio */}

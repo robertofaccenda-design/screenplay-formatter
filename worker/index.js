@@ -370,6 +370,44 @@ REGOLE:
 - Se non ci sono effetti speciali, veicoli o altri elementi opzionali, restituisci array vuoti
 - Restituisci SOLO il JSON valido, senza markdown, backtick o testo aggiuntivo.`;
 
+const BUDGET_SYSTEM_PROMPT = `Sei un produttore esecutivo e line producer italiano con 20 anni di esperienza nella redazione di piani economici per produzioni cinematografiche, documentari e candidature a bandi pubblici (MiC, Regioni, SIAE, fondi europei). Ricevi in input un breakdown di produzione già strutturato (cast, location, props, costumi, comparse, piano di lavoro) e devi trasformarlo in una bozza di budget di produzione, secondo le convenzioni italiane: NON usare tariffe o sindacati statunitensi (niente SAG-AFTRA/IATSE/DGA), fai riferimento a un mercato italiano indipendente/formativo con contributi previdenziali INPS ex-ENPALS e ritenuta d'acconto per collaborazioni occasionali dove pertinente.
+
+Restituisci ESCLUSIVAMENTE un oggetto JSON valido con questa struttura:
+
+{
+  "valuta": "EUR",
+  "nota_metodologica": "<breve nota sui criteri di stima usati; specifica sempre che sono valori indicativi di mercato italiano indipendente, da validare con un line producer prima di un uso ufficiale>",
+  "macro_fasi": [
+    {
+      "fase": "Sviluppo" | "Preparazione" | "Riprese" | "Post-produzione" | "Distribuzione",
+      "giorni_stimati": <numero>,
+      "note": "<criterio di stima>"
+    }
+  ],
+  "voci": [
+    {
+      "categoria": "ATL" | "BTL" | "POST",
+      "reparto": "<es. Regia, Sceneggiatura, Cast artistico, Aiuto regia, Location e permessi, Costumi e trucco, Attrezzature tecniche, Troupe tecnica, Comparse, Post-produzione immagine, Post-produzione audio, Musiche e diritti, Assicurazioni set>",
+      "voce": "<descrizione della singola voce di costo>",
+      "quantita": <numero>,
+      "unita": "<es. giornate, cachet, a corpo, noleggio/giorno, settimana>",
+      "costo_unitario_stimato_eur": <numero, stima realistica di mercato italiano indipendente>,
+      "fonte_stima": "breakdown_cast" | "breakdown_locations" | "breakdown_props" | "breakdown_costumi" | "breakdown_comparse" | "piano_lavoro" | "standard_settore",
+      "note": "<eventuali criticità, alternative o assunzioni fatte>"
+    }
+  ]
+}
+
+REGOLE:
+- Genera una voce di budget per ogni elemento significativo del breakdown ricevuto: ogni personaggio del cast (usa giorni_lavoro_stimati come quantita, unita "giornate"), ogni location (permessi/scouting/allestimento), props/costumi aggregati per reparto quando numerosi, comparse (per giornata coinvolta), troupe tecnica minima necessaria (regista, aiuto regia, direttore della fotografia, fonico, macchinista, costumista, truccatore) commisurata a giorni_ripresa_stimati e complessità_produttiva.
+- Aggiungi sempre voci ATL per regia e, se deducibile, sceneggiatura/soggetto.
+- Aggiungi sempre voci BTL per attrezzature tecniche (camera, luci, audio) a noleggio/giorno.
+- Aggiungi voci POST per montaggio, color correction, mix audio, musiche/diritti in proporzione alla complessità e alla durata stimata.
+- NON includere assicurazioni, spese generali o imprevisti come voci: vengono calcolate separatamente dall'applicazione come percentuali sul totale.
+- Usa valori realistici per il mercato italiano indipendente/formativo (produzioni a budget contenuto, non hollywoodiane): es. una comparsa 50-80€/giornata, un tecnico giovane 100-180€/giornata, non cifre da produzione USA.
+- Se un dato non è deducibile con certezza, usa una stima prudenziale e segnalalo in "note".
+- Restituisci SOLO il JSON valido, senza markdown, backtick o testo aggiuntivo.`;
+
 const LOCATION_SHEETS_SYSTEM_PROMPT = `Sei un location manager e scenografo cinematografico con 20 anni di esperienza, con una solida formazione nell'insegnamento della produzione audiovisiva. Analizza una sceneggiatura in formato JSON e genera schede location dettagliate, pronte per il location scouting e per uso didattico.
 
 Restituisci ESCLUSIVAMENTE un oggetto JSON valido con questa struttura:
@@ -1113,6 +1151,66 @@ const handleBreakdown = async (request, env) => {
   }
 };
 
+const handleBudget = async (request, env) => {
+  if (request.method === "OPTIONS") {
+    return new Response("", { status: 200, headers: jsonHeaders });
+  }
+
+  if (request.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed" }, 405);
+  }
+
+  try {
+    const rawBody = await request.text();
+    const parsedBody = safeJsonParse(rawBody || "{}");
+    const breakdown = parsedBody?.breakdown;
+
+    if (!breakdown || typeof breakdown !== "object" || !breakdown.reparti) {
+      return jsonResponse({ error: "Breakdown non valido o mancante: genera prima il breakdown reparti." }, 400);
+    }
+
+    const apiKey = getAnthropicApiKey(request, env);
+    if (!apiKey) {
+      return missingApiKeyResponse();
+    }
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 6000,
+        system: BUDGET_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: "user",
+            content: `Genera la bozza di budget di produzione a partire da questo breakdown:\n\n${JSON.stringify(breakdown)}`,
+          },
+        ],
+      }),
+    });
+
+    const rawResponseBody = await response.text();
+    const data = safeJsonParse(rawResponseBody);
+
+    if (!response.ok) {
+      return jsonResponse({ error: extractAnthropicError(data, response.status) }, 500);
+    }
+
+    const raw = data?.content?.find((block) => block.type === "text")?.text || "{}";
+    const clean = raw.replace(/```json|```/g, "").trim();
+    const budget = JSON.parse(jsonrepair(clean));
+
+    return jsonResponse({ budget });
+  } catch (err) {
+    return jsonResponse({ error: `Errore interno: ${err.message}` }, 500);
+  }
+};
+
 const handleLocationSheets = async (request, env) => {
   if (request.method === "OPTIONS") {
     return new Response("", { status: 200, headers: jsonHeaders });
@@ -1258,6 +1356,10 @@ export default {
 
     if (url.pathname === "/api/breakdown") {
       return handleBreakdown(request, env);
+    }
+
+    if (url.pathname === "/api/budget") {
+      return handleBudget(request, env);
     }
 
     if (url.pathname === "/api/location-sheets") {
