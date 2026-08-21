@@ -601,6 +601,7 @@ ISTRUZIONI IMPORTANTI:
 - Genera una voce per ogni personaggio del cast (quantita = giorni_lavoro_stimati, unita "giornate"), una per ogni location, voci aggregate per props/costumi/comparse, e voci minime per troupe tecnica (regia, fotografia, audio) e post-produzione.
 - Usa valori realistici per produzioni indipendenti/formative italiane a budget contenuto.
 - NON includere assicurazioni, spese generali o imprevisti: sono calcolati a parte dall'applicazione.
+- Sii SINTETICO: "voce" massimo 8 parole, "note" massimo 12 parole (usa "" se non c'è nulla da aggiungere). Con molte voci la sinteticità evita risposte troncate.
 - Restituisci ESCLUSIVAMENTE un oggetto JSON valido, senza markdown e senza spiegazioni.
 
 SCHEMA ESATTO:
@@ -5749,13 +5750,16 @@ export default function App() {
       setBudget(isLocalAi ? unwrapLocalPayload(data, ["budget", "budget_produzione"]) : data.budget);
       setActiveTab("budget");
     } catch (e) {
-      if (isLocalAi) {
-        console.warn("Budget LM Studio non valido, genero fallback locale:", e);
+      const message = e?.message || "";
+      const isRecoverableParsingIssue = isLocalAi || message.startsWith("Errore interno");
+      if (isRecoverableParsingIssue) {
+        console.warn("Budget AI non valido (probabile risposta troncata), genero fallback locale:", e);
         setBudget(buildFallbackBudget(breakdown));
         setActiveTab("budget");
+        setError(`L'AI non ha generato un budget valido (${message || "risposta non interpretabile"}). Ho creato una bozza automatica con tariffe indicative: rivedila e integrala manualmente nella tab Budget.`);
         return;
       }
-      setError("Errore budget: " + e.message);
+      setError("Errore budget: " + message);
     } finally {
       setLoadingBudget(false);
     }

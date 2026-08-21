@@ -393,7 +393,7 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido con questa struttura:
       "unita": "<es. giornate, cachet, a corpo, noleggio/giorno, settimana>",
       "costo_unitario_stimato_eur": <numero, stima realistica di mercato italiano indipendente>,
       "fonte_stima": "breakdown_cast" | "breakdown_locations" | "breakdown_props" | "breakdown_costumi" | "breakdown_comparse" | "piano_lavoro" | "standard_settore",
-      "note": "<eventuali criticità, alternative o assunzioni fatte>"
+      "note": "<massimo 12 parole; usa \\"\\" se non c'è nulla di rilevante da aggiungere>"
     }
   ]
 }
@@ -405,7 +405,7 @@ REGOLE:
 - Aggiungi voci POST per montaggio, color correction, mix audio, musiche/diritti in proporzione alla complessità e alla durata stimata.
 - NON includere assicurazioni, spese generali o imprevisti come voci: vengono calcolate separatamente dall'applicazione come percentuali sul totale.
 - Usa valori realistici per il mercato italiano indipendente/formativo (produzioni a budget contenuto, non hollywoodiane): es. una comparsa 50-80€/giornata, un tecnico giovane 100-180€/giornata, non cifre da produzione USA.
-- Se un dato non è deducibile con certezza, usa una stima prudenziale e segnalalo in "note".
+- Se un dato non è deducibile con certezza, usa una stima prudenziale. Sii SINTETICO in ogni campo testuale ("voce" massimo 8 parole, "note" massimo 12 parole): il budget può avere molte voci, la sinteticità evita di troncare la risposta.
 - Restituisci SOLO il JSON valido, senza markdown, backtick o testo aggiuntivo.`;
 
 const LOCATION_SHEETS_SYSTEM_PROMPT = `Sei un location manager e scenografo cinematografico con 20 anni di esperienza, con una solida formazione nell'insegnamento della produzione audiovisiva. Analizza una sceneggiatura in formato JSON e genera schede location dettagliate, pronte per il location scouting e per uso didattico.
@@ -1183,7 +1183,7 @@ const handleBudget = async (request, env) => {
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 6000,
+        max_tokens: 8192,
         system: BUDGET_SYSTEM_PROMPT,
         messages: [
           {
