@@ -46,7 +46,9 @@ Moduli previsti:
 - Genera schede personaggio
 - Genera schede location
 - Genera breakdown per reparti di produzione
-- Esporta in PDF anche schede personaggio, schede location e breakdown reparti
+- Genera una bozza di budget di produzione editabile a partire dal breakdown reparti (voci ATL/BTL/Post-produzione, percentuali di assicurazioni/spese generali/imprevisti)
+- Esporta in PDF anche schede personaggio, schede location, breakdown reparti e budget di produzione
+- Esporta il budget di produzione anche in CSV per Excel
 - Integra Lumina Studio in una scheda **Luci 3D** per simulazioni di setup luce
 - Permette di scegliere tra AI Anthropic su Cloudflare e modello locale via LM Studio
 - Integra **DeepFrame Director / Storyboard** per generare prompt visivi da ogni scena
@@ -59,6 +61,22 @@ Moduli previsti:
 - Include un comando di stop per interrompere parsing o formattazione avviati accidentalmente
 
 ## Aggiornamenti Recenti
+
+### Budget di Produzione
+
+Nuovo modulo che genera una bozza di budget di produzione editabile a partire dal **Breakdown Reparti** già calcolato: non rilegge la sceneggiatura, riusa cast, location, props, costumi, comparse e giorni di ripresa già estratti.
+
+Caratteristiche:
+
+- voci raggruppate in **ATL** (Above The Line), **BTL** (Below The Line) e **Post-produzione**, ciascuna editabile (quantità, unità, costo unitario);
+- convenzioni italiane: tariffe di mercato indipendente/formativo, CCNL cinema, INPS ex-ENPALS, non tariffe o sindacati statunitensi;
+- percentuali configurabili per **Assicurazioni**, **Spese generali** e **Imprevisti**, calcolate sul subtotale di produzione (non voci generate dall'AI);
+- aggiunta e rimozione manuale di voci in ogni categoria;
+- export **CSV** (separatore `;`, con BOM per compatibilità Excel in italiano) ed export **PDF** stampabile;
+- fallback locale deterministico (`buildFallbackBudget`) se l'AI (LM Studio o Anthropic) non restituisce un JSON valido, cosi il flusso non si blocca mai: viene generata comunque una bozza con tariffe indicative da rifinire a mano;
+- pensato in particolare per bozze di piano economico da rifinire per candidature a bandi pubblici (MiC, CIPS, SIAE).
+
+Il bottone **Budget di Produzione** compare in sidebar solo dopo aver generato il Breakdown Reparti.
 
 ### DeepFrame Director / Storyboard
 
@@ -255,6 +273,7 @@ Quando si usa LM Studio locale, DeepFrame applica alcune protezioni per evitare 
 - Analisi Drammaturgica su script lunghi viene divisa in blocchi di scene;
 - ogni blocco di analisi ha un timeout;
 - se LM Studio restituisce JSON non valido, DeepFrame usa un fallback locale per mantenere attiva la dashboard;
+- lo stesso vale per il Budget di Produzione anche quando si usa Anthropic: se la risposta AI arriva troncata o non interpretabile, DeepFrame genera comunque una bozza automatica con tariffe indicative invece di bloccarsi;
 - le segnalazioni tecniche ripetute dei fallback LM Studio vengono deduplicate per evitare messaggi identici nella dashboard;
 - le Schede Personaggio hanno un fallback locale basato su personaggi, scene e battute riconosciute.
 
@@ -397,6 +416,21 @@ Endpoint:
 /api/breakdown
 ```
 
+### Budget di Produzione
+
+Genera una bozza di budget di produzione a partire dal breakdown reparti già calcolato:
+
+- voci ATL/BTL/Post-produzione con quantità, unità e costo unitario stimato
+- tariffe di riferimento per il mercato italiano indipendente/formativo (non USA)
+- nota metodologica e macro-fasi (Sviluppo, Preparazione, Riprese, Post-produzione)
+- export CSV (Excel) e PDF del report
+
+Endpoint:
+
+```text
+/api/budget
+```
+
 ### Luci 3D
 
 Integra Lumina Studio come modulo esterno visualizzabile dentro l'app per simulare setup luci 3D:
@@ -436,7 +470,8 @@ Output:
 | `.fountain` | Compatibile con software di sceneggiatura |
 | `.html` | Visualizzazione, stampa o conversione PDF |
 | PDF sceneggiatura | Stampa continua o una scena per pagina |
-| PDF report | Schede personaggio, schede location, breakdown reparti |
+| PDF report | Schede personaggio, schede location, breakdown reparti, budget di produzione |
+| CSV | Budget di produzione, per Excel |
 | Pacchetto storyboard JSON | Prompt, scene, configurazione Director e stato frame |
 
 ## Configurazione Cloudflare
