@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import * as mammoth from "mammoth";
 import { jsonrepair } from "jsonrepair";
+import ContinuityPanel from "./continuity/ContinuityPanel.jsx";
 
 const API_FORMAT           = "/api/format";
 const API_ANALYZE          = "/api/analyze";
@@ -5204,6 +5205,7 @@ export default function App() {
   const [loadingMsg, setLoadingMsg] = useState("");
   const [error, setError]         = useState("");
   const [activeTab, setActiveTab] = useState("preview");
+  const [continuityProject, setContinuityProject] = useState({ blueprint: null, constraints: [], reviews: [] });
   const [analyTab, setAnalyTab]   = useState("struttura");
   const [dragOver, setDragOver]   = useState(false);
   const [anthropicApiKey, setAnthropicApiKey] = useState("");
@@ -6273,6 +6275,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
           {/* Tab bar principale */}
           <div style={s.tabs}>
             {tabBtn("process", "Processo", activeTab === "process")}
+            {tabBtn("continuity", "Continuità / IntelliMaker", activeTab === "continuity")}
             {elements && (
               <>
               {tabBtn("preview", "Anteprima", activeTab === "preview")}
@@ -6368,7 +6371,7 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
             )}
 
             {/* Stato vuoto */}
-            {!loading && !analyzing && !elements && activeTab !== "lumina" && activeTab !== "process" && (
+            {!loading && !analyzing && !elements && activeTab !== "lumina" && activeTab !== "process" && activeTab !== "continuity" && (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "12px", color: "#666", fontFamily: "sans-serif" }}>
                 <div style={{ fontSize: "48px" }}>🎞️</div>
                 <div style={{ fontSize: "16px", color: "#555" }}>Carica un file e avvia la formattazione</div>
@@ -6398,6 +6401,17 @@ ${buildScreenplayHtml(elements, { scenePageBreaks })}
                 directorConfig={directorConfig}
                 directorShotStates={directorShotStates}
                 setActiveTab={setActiveTab}
+              />
+            )}
+
+            {!busy && activeTab === "continuity" && (
+              <ContinuityPanel
+                project={continuityProject}
+                setProject={setContinuityProject}
+                scriptText={rawText || (elements || []).map(e => e.content || "").join("\n")}
+                runAi={runLocalLmStudio}
+                localAi={isLocalAi}
+                model={lmStudioModel}
               />
             )}
 
