@@ -62,6 +62,41 @@ Moduli previsti:
 
 ## Aggiornamenti Recenti
 
+### Continuità / IntelliMaker — ponte CineCrew
+
+Primo modulo operativo per collegare il piano delle inquadrature alle osservazioni del girato, nella direzione di convergenza fra **DeepFrame** e **IntelliMaker**. La scheda è disponibile anche senza una sceneggiatura già formattata.
+
+- Importa ed esporta piani JSON `SceneBlueprint` / FilmDSL di [CineCrew](https://github.com/Ironieser/CineCrew), conservando i livelli non utilizzati.
+- Mostra i vincoli testuali del piano e consente di aggiungere controlli strutturati per entità, presenza, mano, costume, stato dell'azione e direzione sullo schermo.
+- Richiede l'approvazione esplicita dei controlli prima del confronto.
+- Registra osservazioni manuali oppure prepara una revisione visiva tramite un modello multimodale in LM Studio.
+- Accetta fotogrammi JPEG/PNG/WebP, un riferimento facoltativo e video locali da cui selezionare manualmente un fotogramma.
+- Distingue possibile discrepanza, nessuna discrepanza nel valore confrontato e dettaglio non valutabile.
+- Conserva evidenze, vincoli usati e decisioni dell'operatore nel registro esportabile in JSON.
+
+**Contributo di CineCrew:** il modulo implementa in JavaScript un ponte verso il suo formato FilmDSL. Non esegue la pipeline Python né il suo `VisualJudgeAgent`: la revisione dei take è un adattamento DeepFrame. Licenza e attribuzione sono in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+**Prova senza AI, in tre minuti**
+
+1. Apri **Continuità / IntelliMaker** e scegli **Carica esempio sintetico**.
+2. Seleziona `12C` e approva il vincolo tazza / mano / destra.
+3. Inserisci l'identificativo del take e apri il confronto manuale.
+4. Seleziona visibile, indica `sinistra`, scrivi l'evidenza e registra il confronto.
+5. Verifica **Possibile discrepanza**, annota la decisione ed esporta progetto/report.
+
+**Con LM Studio:** seleziona il motore locale e un modello con supporto immagini. L'invio di immagini e contesto avviene solo premendo il pulsante di revisione; il video intero non viene inviato. In sviluppo è disponibile il proxy Vite; dai siti pubblicati la connessione a localhost dipende anche da CORS e dalle restrizioni del browser. È inoltre possibile proporre un piano FilmDSL a partire da una singola scena.
+
+**Limiti del prototipo:** non analizza automaticamente l'intero take, non monitora il set in tempo reale e non modifica i media. Un fotogramma non basta a verificare raccordi dinamici o asse. Il confronto testuale non è semantico e ogni segnalazione richiede verifica umana. Lo stato resta in memoria: esportare prima di ricaricare; reimportare un report recupera piano e vincoli da riapprovare, non ripristina lo storico delle revisioni.
+
+**Verifiche:** 13 test automatici, lint del modulo e compilazione superati; confronto manuale provato nell'interfaccia. Accuratezza del modello visivo e collegamento al Mac dell'utente ancora da validare su take reali.
+
+```bash
+node --test tests/continuity.test.mjs
+npm run build
+```
+
+Guida completa: [docs/CONTINUITY_CINECREW.md](docs/CONTINUITY_CINECREW.md).
+
 ### Budget di Produzione
 
 Nuovo modulo che genera una bozza di budget di produzione editabile a partire dal **Breakdown Reparti** già calcolato: non rilegge la sceneggiatura, riusa cast, location, props, costumi, comparse e giorni di ripresa già estratti.
@@ -662,10 +697,11 @@ TAGLIO A:
 ## Note Di Sicurezza
 
 - La chiave Anthropic resta lato server dentro Cloudflare
-- Il browser chiama solo endpoint `/api/*`
+- Con Anthropic il browser usa gli endpoint `/api/*`; con LM Studio e ComfyUI contatta gli endpoint locali configurati, direttamente o tramite proxy Vite.
 - Il frontend non contiene segreti
 - Gli output HTML vengono escapati prima dell'esportazione
 
 ## Stato Del Progetto
 
 Prototipo funzionante per workflow di scrittura, analisi e pre-produzione. Pensato per uso didattico, sviluppo sceneggiature e preparazione produttiva leggera.
+
